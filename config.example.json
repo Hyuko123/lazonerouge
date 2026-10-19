@@ -17,9 +17,9 @@
   "mutedRoleId": "",
   "roleMenuChannelId": "",
   "roleMenuOptions": [
-    { "label": "Valorant", "value": "valorant", "roleId": "" },
-    { "label": "League of Legends", "value": "lol", "roleId": "" },
-    { "label": "Notifications", "value": "notifications", "roleId": "" }
+    { "label": "Valorant", "value": "valorant", "emoji": "🎮", "roleId": "" },
+    { "label": "League of Legends", "value": "lol", "emoji": "🧙", "roleId": "" },
+    { "label": "Notifications", "value": "notifications", "emoji": "🔔", "roleId": "" }
   ],
   "rules": [
     "Respectez tous les membres. Les insultes, le harcèlement et les discriminations sont interdits.",

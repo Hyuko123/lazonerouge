@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('node:fs');
-const { Client, GatewayIntentBits, Events, EmbedBuilder } = require('discord.js');
-const { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, finishGiveaway, onboardingRow } = require('./handlers');
+const { Client, GatewayIntentBits, Events, EmbedBuilder, Partials } = require('discord.js');
+const { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, onboardingRow } = require('./handlers');
 const store = require('./database');
 
 if (!process.env.DISCORD_TOKEN) {
@@ -18,7 +18,10 @@ try {
   process.exit(1);
 }
 configureHandlers(cfg);
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates] });
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessageReactions],
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User]
+});
 
 client.once(Events.ClientReady, async c => {
   console.log(`Connecté en tant que ${c.user.tag}`);
@@ -75,6 +78,13 @@ client.on(Events.InteractionCreate, async i => {
     if (i.deferred || i.replied) await i.followUp({content:message,ephemeral:true}).catch(()=>{});
     else await i.reply({content:message,ephemeral:true}).catch(()=>{});
   }
+});
+
+client.on(Events.MessageReactionAdd, (reaction, user) => {
+  handleReaction(reaction, user, true).catch(console.error);
+});
+client.on(Events.MessageReactionRemove, (reaction, user) => {
+  handleReaction(reaction, user, false).catch(console.error);
 });
 
 client.login(process.env.DISCORD_TOKEN);

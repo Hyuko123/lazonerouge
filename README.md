@@ -7,7 +7,7 @@ Bot communautaire en **Node.js 20+ / Discord.js 14**, avec une identité visuell
 - Tickets privés avec menu de catégories, noms lisibles, prise en charge staff, ajout de membre, fermeture confirmée et transcription envoyée au propriétaire en MP.
 - Accueil des nouveaux membres avec enregistrement du Riot ID et acceptation du règlement avant attribution du rôle membre.
 - Rôle automatique et message de bienvenue.
-- Menu de choix de rôles.
+- Panneau de rôles par réactions : une réaction ajoute le rôle associé, la retirer enlève le rôle.
 - Rôle `BANNED` (masquage des salons via les permissions à configurer).
 - Rôle `MUTE` et commandes de modération.
 - `/aide` : récapitulatif des commandes.
@@ -59,7 +59,7 @@ Le dépôt contient `render.yaml` pour créer un **Background Worker**. C'est un
 - Scopes OAuth2 : `bot` et `applications.commands`.
 - Active **Server Members Intent** pour le rôle automatique et le message de bienvenue.
 - Place le rôle du bot au-dessus des rôles qu'il doit attribuer ou retirer.
-- Accorde uniquement les permissions nécessaires : gérer les rôles, gérer les salons, envoyer des messages, intégrer des liens, lire l'historique, expulser si nécessaire.
+- Accorde uniquement les permissions nécessaires : gérer les rôles, gérer les salons, ajouter des réactions, envoyer des messages, intégrer des liens, lire l'historique, expulser si nécessaire.
 - Les commandes slash n'ont pas besoin de l'intent Message Content.
 
 ## Configuration des permissions
@@ -78,6 +78,9 @@ Configure `onboardingChannelId` pour publier le panneau d'arrivée. `memberRoleI
 
 ### Annonces
 Configure `announcementPanelChannelId` pour le panneau staff, `announcementChannelId` pour la destination des annonces et `announcementStaffRoleId` pour autoriser l’usage du bouton. La publication du panneau lui-même reste réservée aux membres ayant `ManageGuild`.
+
+### Rôles par réactions
+Chaque entrée de `roleMenuOptions` doit avoir `label`, `value`, `emoji` et `roleId`. Utilise un emoji unique par rôle. Le bot doit pouvoir voir l'historique du salon, ajouter des réactions et gérer les rôles ; place son rôle au-dessus des rôles distribués. `/panneau-roles` publie le panneau actif, et cliquer/retirer une réaction ajoute/retire le rôle correspondant.
 
 ## Commandes
 

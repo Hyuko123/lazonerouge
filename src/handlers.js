@@ -195,11 +195,39 @@ async function handleCommand(i, client) {
     }
     case 'panneau-roles': {
       const channel = cfg.roleMenuChannelId ? await guild.channels.fetch(cfg.roleMenuChannelId).catch(()=>null) : i.channel;
-      const options = (cfg.roleMenuOptions || []).filter(x=>x.roleId).slice(0,25).map(x=>({label:x.label,value:x.value,description:`Recevoir le rôle ${x.label}`.slice(0,100)}));
-      if (!channel?.isTextBased() || !options.length) return i.reply({ content: 'Configure roleMenuChannelId et au moins un roleId dans config.json.', ephemeral: true });
-      const menu = new StringSelectMenuBuilder().setCustomId('roles:select').setPlaceholder('Choisis tes rôles').setMinValues(0).setMaxValues(options.length).addOptions(options);
-      await channel.send({ embeds:[new EmbedBuilder().setColor(COLOR).setTitle('🎭 Choix des rôles').setDescription('Sélectionne les rôles que tu souhaites recevoir. Tu peux modifier ton choix plus tard.')], components:[new ActionRowBuilder().addComponents(menu)] });
-      return i.reply({ content:'Menu de rôles publié.', ephemeral:true });
+      const options = (cfg.roleMenuOptions || []).filter(option => option.roleId).slice(0, 20);
+      const emojis = options.map(option => option.emoji);
+      if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon de rôles valide.', ephemeral: true });
+      if (!options.length || options.some(option => !option.label || !option.emoji) || new Set(emojis).size !== emojis.length) {
+        return i.reply({ content: 'Ajoute un emoji unique à chaque rôle dans roleMenuOptions de config.json.', ephemeral: true });
+      }
+      const description = [
+        'Choisis les rôles qui te correspondent en cliquant sur les réactions sous ce message.',
+        '',
+        '**Comment ça marche ?**',
+        '• Clique sur une réaction pour recevoir le rôle associé.',
+        '• Clique une seconde fois sur la même réaction pour retirer ce rôle.',
+        '• Tu peux choisir plusieurs rôles et modifier tes choix quand tu veux.',
+        '• Ces rôles servent à afficher tes rangs et à choisir les notifications que tu souhaites recevoir.',
+        '',
+        '**Rôles disponibles**',
+        ...options.map(option => `${option.emoji}  ${option.label}`),
+        '',
+        'Si une réaction ne fonctionne pas, préviens un membre du staff.'
+      ].join('\n');
+      const panel = new EmbedBuilder().setColor(COLOR).setTitle('🎭 Choix des rôles')
+        .setDescription(description.slice(0, 4000)).setFooter({ text: 'Un rôle peut être ajouté ou retiré à tout moment.' });
+      await i.deferReply({ ephemeral: true });
+      const message = await channel.send({ embeds: [panel] });
+      store.saveRolePanel.run(guild.id, channel.id, message.id);
+      try {
+        for (const option of options) await message.react(option.emoji);
+      } catch (error) {
+        await message.delete().catch(() => {});
+        store.deleteRolePanel.run(message.id);
+        throw error;
+      }
+      return i.editReply('Panneau de rôles publié avec ses réactions.');
     }
     case 'publier-reglement': {
       const channel = cfg.rulesChannelId ? await guild.channels.fetch(cfg.rulesChannelId).catch(()=>null) : i.channel;
@@ -445,4 +473,26 @@ async function handleSelect(i, client) {
   }
   return i.reply({content:changes.length?`Choix mis à jour : ${changes.join(', ')}`:'Aucun changement.',ephemeral:true});
 }
-module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, finishGiveaway, onboardingRow };
+function matchesRoleEmoji(configured, emoji) {
+  return configured === emoji.name || configured === emoji.id || configured === emoji.toString();
+}
+async function handleReaction(reaction, user, added) {
+  if (user.partial) user = await user.fetch().catch(() => null);
+  if (!user) return;
+  if (user.bot) return;
+  if (reaction.partial) reaction = await reaction.fetch().catch(() => null);
+  if (!reaction) return;
+  const message = reaction.message.partial ? await reaction.message.fetch().catch(() => null) : reaction.message;
+  if (!message) return;
+  const panel = store.getRolePanel.get(message.id);
+  if (!panel || message.guildId !== panel.guild_id || message.channelId !== panel.channel_id) return;
+  const option = (cfg.roleMenuOptions || []).find(item => item.roleId && item.emoji && matchesRoleEmoji(item.emoji, reaction.emoji));
+  if (!option) return;
+  const member = await message.guild.members.fetch(user.id).catch(() => null);
+  if (!member) return;
+  const role = await message.guild.roles.fetch(option.roleId).catch(() => null);
+  if (!role) return;
+  if (added) await member.roles.add(role, 'Rôle attribué par réaction');
+  else await member.roles.remove(role, 'Rôle retiré par réaction');
+}
+module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, onboardingRow };

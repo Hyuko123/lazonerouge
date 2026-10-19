@@ -19,91 +19,109 @@
   "roleMenuOptions": [
     {
       "label": "Radiant",
+      "emoji": "💠",
       "value": "radiant",
       "roleId": "1561830567899693147"
     },
     {
       "label": "Immortal",
+      "emoji": "🛡️",
       "value": "immortal",
       "roleId": "1561830567899693146"
     },
     {
       "label": "Ascendant",
+      "emoji": "🟢",
       "value": "ascendant",
       "roleId": "1561830567899693145"
     },
     {
       "label": "Diamond",
+      "emoji": "💎",
       "value": "diamond",
       "roleId": "1561830567899693144"
     },
     {
       "label": "Platinum",
+      "emoji": "🔷",
       "value": "platinum",
       "roleId": "1561830567899693143"
     },
     {
       "label": "Gold",
+      "emoji": "🥇",
       "value": "gold",
       "roleId": "1561830567899693142"
     },
     {
       "label": "Silver",
+      "emoji": "🥈",
       "value": "silver",
       "roleId": "1561830567899693141"
     },
     {
       "label": "Bronze",
+      "emoji": "🥉",
       "value": "bronze",
       "roleId": "1561830567899693140"
     },
     {
       "label": "Iron",
+      "emoji": "⚙️",
       "value": "iron",
       "roleId": "1561830567899693139"
     },
     {
       "label": "+18",
+      "emoji": "🔞",
       "value": "plus18",
       "roleId": "1561830567878598699"
     },
     {
       "label": "-18",
+      "emoji": "🔓",
       "value": "moins18",
       "roleId": "1561830567878598698"
     },
     {
       "label": "Femme",
+      "emoji": "♀️",
       "value": "femme",
       "roleId": "1561830567870341129"
     },
     {
       "label": "Homme",
+      "emoji": "♂️",
       "value": "homme",
       "roleId": "1561830567870341128"
     },
     {
       "label": "Majeur",
+      "emoji": "✅",
       "value": "majeur",
       "roleId": "1561830567870341126"
     },
     {
       "label": "Mineur",
+      "emoji": "🧒",
       "value": "mineur",
       "roleId": "1561830567870341125"
     },
     {
       "label": "Notif events",
+      "emoji": "📅",
       "value": "notif_events",
       "roleId": "1561830567870341123"
     },
     {
       "label": "Notif Giveaway",
+      "emoji": "🎉",
       "value": "notif_giveaway",
       "roleId": "1561830567870341122"
     },
     {
       "label": "Notif Annonces",
+      "emoji": "📢",
       "value": "notif_annonces",
       "roleId": "1561830567870341121"
     }
