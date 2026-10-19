@@ -33,6 +33,13 @@ CREATE TABLE IF NOT EXISTS role_panels (
   channel_id TEXT NOT NULL,
   message_id TEXT NOT NULL UNIQUE
 );
+CREATE TABLE IF NOT EXISTS role_panel_messages (
+  guild_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_id TEXT NOT NULL UNIQUE,
+  PRIMARY KEY (guild_id, category)
+);
 `);
 
 module.exports = {
@@ -51,8 +58,8 @@ module.exports = {
       SELECT 1 FROM giveaways WHERE message_id = ? AND ended = 0 AND ends_at > ?
     )`),
   entries: db.prepare('SELECT user_id FROM giveaway_entries WHERE message_id = ?'),
-  saveRolePanel: db.prepare(`INSERT INTO role_panels(guild_id, channel_id, message_id)
-    VALUES(?, ?, ?) ON CONFLICT(guild_id) DO UPDATE SET channel_id=excluded.channel_id, message_id=excluded.message_id`),
-  getRolePanel: db.prepare('SELECT * FROM role_panels WHERE message_id = ?'),
-  deleteRolePanel: db.prepare('DELETE FROM role_panels WHERE message_id = ?')
+  saveRolePanel: db.prepare(`INSERT INTO role_panel_messages(guild_id, category, channel_id, message_id)
+    VALUES(?, ?, ?, ?) ON CONFLICT(guild_id, category) DO UPDATE SET channel_id=excluded.channel_id, message_id=excluded.message_id`),
+  getRolePanel: db.prepare('SELECT * FROM role_panel_messages WHERE message_id = ?'),
+  deleteRolePanel: db.prepare('DELETE FROM role_panel_messages WHERE message_id = ?')
 };

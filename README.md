@@ -80,14 +80,16 @@ Configure `onboardingChannelId` pour publier le panneau d'arrivée. `memberRoleI
 Configure `announcementPanelChannelId` pour le panneau staff, `announcementChannelId` pour la destination des annonces et `announcementStaffRoleId` pour autoriser l’usage du bouton. La publication du panneau lui-même reste réservée aux membres ayant `ManageGuild`.
 
 ### Rôles par réactions
-Chaque entrée de `roleMenuOptions` doit avoir `label`, `value`, `emoji` et `roleId`. Utilise un emoji unique par rôle. Le bot doit pouvoir voir l'historique du salon, ajouter des réactions et gérer les rôles ; place son rôle au-dessus des rôles distribués. `/panneau-roles` publie le panneau actif, et cliquer/retirer une réaction ajoute/retire le rôle correspondant.
+Chaque entrée de `roleMenuOptions` doit avoir `label`, `value`, `emoji`, `category` et `roleId`. Utilise `rang`, `profil` ou `notifications` comme catégorie, et un emoji unique par rôle. Le bot doit pouvoir voir l'historique du salon, ajouter des réactions et gérer les rôles ; place son rôle au-dessus des rôles distribués. `/panneau-roles-rang`, `/panneau-roles-profil` et `/panneau-roles-notifications` publient trois messages distincts. Cliquer/retirer une réaction ajoute/retire le rôle correspondant.
 
 ## Commandes
 
 - `/aide`
 - `/panneau-tickets`
 - `/fermer-ticket`
-- `/panneau-roles`
+- `/panneau-roles-rang`
+- `/panneau-roles-profil`
+- `/panneau-roles-notifications`
 - `/publier-reglement`
 - `/panneau-annonces`
 - `/annonce`

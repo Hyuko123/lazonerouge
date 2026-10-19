@@ -25,6 +25,20 @@ const ticketTypes = {
   partnership: { label: 'Partenariat', emoji: '🤝' },
   other: { label: 'Autre demande', emoji: '💬' }
 };
+const rolePanelCategories = {
+  rang: {
+    title: '🏆 Rôles de rang',
+    description: 'Choisis ton rang Valorant actuel. Clique sur sa réaction pour recevoir le rôle ; retire ta réaction si tu veux l’enlever ou changer de rang.'
+  },
+  profil: {
+    title: '👤 Sexe et âge',
+    description: 'Choisis les rôles de profil et de tranche d’âge que tu souhaites afficher. Clique sur une réaction pour ajouter le rôle et retire-la pour le supprimer. Ces choix sont facultatifs.'
+  },
+  notifications: {
+    title: '🔔 Notifications',
+    description: 'Choisis les sujets pour lesquels tu souhaites recevoir des notifications. Ajoute une réaction pour t’abonner, retire-la pour te désabonner. Tu peux choisir plusieurs notifications.'
+  }
+};
 
 async function log(guild, message) {
   if (!cfg.logChannelId) return;
@@ -157,13 +171,47 @@ async function finishGiveaway(client, messageId, forceChannelId) {
   return { ok: true, winners };
 }
 
+async function publishRolePanel(interaction, category) {
+  const details = rolePanelCategories[category];
+  const channel = cfg.roleMenuChannelId
+    ? await interaction.guild.channels.fetch(cfg.roleMenuChannelId).catch(() => null)
+    : interaction.channel;
+  const options = (cfg.roleMenuOptions || []).filter(option => option.category === category && option.roleId);
+  const emojis = options.map(option => option.emoji);
+  if (!channel?.isTextBased()) return interaction.reply({ content: 'Configure un salon de rôles valide.', ephemeral: true });
+  if (!options.length || options.some(option => !option.label || !option.emoji) || new Set(emojis).size !== emojis.length) {
+    return interaction.reply({ content: `Vérifie les rôles et les emojis de la catégorie « ${category} » dans config.json.`, ephemeral: true });
+  }
+  const description = [
+    details.description,
+    '',
+    '**Rôles de cette catégorie**',
+    ...options.map(option => `${option.emoji}  ${option.label}`),
+    '',
+    'Clique sur une réaction pour ajouter le rôle correspondant. Retire ta réaction pour le supprimer.'
+  ].join('\n');
+  const embed = new EmbedBuilder().setColor(COLOR).setTitle(details.title)
+    .setDescription(description.slice(0, 4000)).setFooter({ text: 'Tu peux modifier tes choix à tout moment.' });
+  await interaction.deferReply({ ephemeral: true });
+  const message = await channel.send({ embeds: [embed] });
+  store.saveRolePanel.run(interaction.guild.id, category, channel.id, message.id);
+  try {
+    for (const option of options) await message.react(option.emoji);
+  } catch (error) {
+    await message.delete().catch(() => {});
+    store.deleteRolePanel.run(message.id);
+    throw error;
+  }
+  return interaction.editReply(`Panneau « ${details.title} » publié avec ses réactions.`);
+}
+
 async function handleCommand(i, client) {
   const guild = i.guild;
   switch (i.commandName) {
     case 'aide': {
       const embed = new EmbedBuilder().setColor(COLOR).setTitle('📚 Commandes du bot').setDescription([
         '**Général**', '`/aide` `/riot-id` `/valorant`',
-        '**Tickets & rôles**', '`/panneau-tickets` `/fermer-ticket` `/panneau-roles`',
+        '**Tickets & rôles**', '`/panneau-tickets` `/fermer-ticket` `/panneau-roles-rang` `/panneau-roles-profil` `/panneau-roles-notifications`',
         '**Modération**', '`/role-bannir` `/role-debannir` `/role-muter` `/role-demuter` `/expulser` `/nettoyer`',
         '**Communauté**', '`/publier-reglement` `/panneau-annonces` `/annonce`',
         '**Concours**', '`/concours-creer` `/concours-terminer` `/concours-relancer`'
@@ -193,42 +241,12 @@ async function handleCommand(i, client) {
     case 'fermer-ticket': {
       return requestTicketClose(i);
     }
-    case 'panneau-roles': {
-      const channel = cfg.roleMenuChannelId ? await guild.channels.fetch(cfg.roleMenuChannelId).catch(()=>null) : i.channel;
-      const options = (cfg.roleMenuOptions || []).filter(option => option.roleId).slice(0, 20);
-      const emojis = options.map(option => option.emoji);
-      if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon de rôles valide.', ephemeral: true });
-      if (!options.length || options.some(option => !option.label || !option.emoji) || new Set(emojis).size !== emojis.length) {
-        return i.reply({ content: 'Ajoute un emoji unique à chaque rôle dans roleMenuOptions de config.json.', ephemeral: true });
-      }
-      const description = [
-        'Choisis les rôles qui te correspondent en cliquant sur les réactions sous ce message.',
-        '',
-        '**Comment ça marche ?**',
-        '• Clique sur une réaction pour recevoir le rôle associé.',
-        '• Clique une seconde fois sur la même réaction pour retirer ce rôle.',
-        '• Tu peux choisir plusieurs rôles et modifier tes choix quand tu veux.',
-        '• Ces rôles servent à afficher tes rangs et à choisir les notifications que tu souhaites recevoir.',
-        '',
-        '**Rôles disponibles**',
-        ...options.map(option => `${option.emoji}  ${option.label}`),
-        '',
-        'Si une réaction ne fonctionne pas, préviens un membre du staff.'
-      ].join('\n');
-      const panel = new EmbedBuilder().setColor(COLOR).setTitle('🎭 Choix des rôles')
-        .setDescription(description.slice(0, 4000)).setFooter({ text: 'Un rôle peut être ajouté ou retiré à tout moment.' });
-      await i.deferReply({ ephemeral: true });
-      const message = await channel.send({ embeds: [panel] });
-      store.saveRolePanel.run(guild.id, channel.id, message.id);
-      try {
-        for (const option of options) await message.react(option.emoji);
-      } catch (error) {
-        await message.delete().catch(() => {});
-        store.deleteRolePanel.run(message.id);
-        throw error;
-      }
-      return i.editReply('Panneau de rôles publié avec ses réactions.');
-    }
+    case 'panneau-roles-rang':
+      return publishRolePanel(i, 'rang');
+    case 'panneau-roles-profil':
+      return publishRolePanel(i, 'profil');
+    case 'panneau-roles-notifications':
+      return publishRolePanel(i, 'notifications');
     case 'publier-reglement': {
       const channel = cfg.rulesChannelId ? await guild.channels.fetch(cfg.rulesChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({content:'Configure rulesChannelId.',ephemeral:true});
@@ -486,7 +504,9 @@ async function handleReaction(reaction, user, added) {
   if (!message) return;
   const panel = store.getRolePanel.get(message.id);
   if (!panel || message.guildId !== panel.guild_id || message.channelId !== panel.channel_id) return;
-  const option = (cfg.roleMenuOptions || []).find(item => item.roleId && item.emoji && matchesRoleEmoji(item.emoji, reaction.emoji));
+  const option = (cfg.roleMenuOptions || []).find(item =>
+    item.category === panel.category && item.roleId && item.emoji && matchesRoleEmoji(item.emoji, reaction.emoji)
+  );
   if (!option) return;
   const member = await message.guild.members.fetch(user.id).catch(() => null);
   if (!member) return;
