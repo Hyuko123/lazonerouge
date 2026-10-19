@@ -1,0 +1,16 @@
+{
+  "name": "discord-community-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord communautaire : tickets, rôles, modération, Valorant, giveaways, règles et annonces.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "engines": { "node": ">=20.0.0" },
+  "dependencies": {
+    "discord.js": "^14.22.1",
+    "dotenv": "^16.6.1",
+    "better-sqlite3": "^12.2.0"
+  }
+}

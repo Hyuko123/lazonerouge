@@ -1,0 +1,28 @@
+{
+  "welcomeChannelId": "",
+  "welcomeRoleId": "",
+  "logChannelId": "",
+  "ticketCategoryId": "",
+  "ticketStaffRoleId": "",
+  "ticketPanelChannelId": "",
+  "rulesChannelId": "",
+  "announcementChannelId": "",
+  "giveawayChannelId": "",
+  "bannedRoleId": "",
+  "mutedRoleId": "",
+  "roleMenuChannelId": "",
+  "roleMenuOptions": [
+    { "label": "Valorant", "value": "valorant", "roleId": "" },
+    { "label": "League of Legends", "value": "lol", "roleId": "" },
+    { "label": "Notifications", "value": "notifications", "roleId": "" }
+  ],
+  "rules": [
+    "Respectez tous les membres. Les insultes, le harcèlement et les discriminations sont interdits.",
+    "Pas de spam, de flood ni de publicité non autorisée.",
+    "Utilisez les salons selon leur sujet et respectez les consignes du staff.",
+    "Ne partagez pas d'informations personnelles, les vôtres ou celles d'autrui.",
+    "Les contenus illégaux, dangereux ou inappropriés sont interdits.",
+    "Les décisions de modération peuvent être contestées calmement via un ticket.",
+    "En rejoignant le serveur, vous acceptez ce règlement."
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "welcomeChannelId": "1561852833542967386",
+  "welcomeRoleId": "1561830567878598702",
+  "logChannelId": "1561852749505761431",
+  "ticketCategoryId": "1561852684410290207",
+  "ticketStaffRoleId": "1561830567996293190",
+  "ticketPanelChannelId": "1561830584584642570",
+  "rulesChannelId": "1561830569573097489",
+  "announcementChannelId": "1561830569573097484",
+  "giveawayChannelId": "1561830570034462812",
+  "bannedRoleId": "1561830567916609647",
+  "mutedRoleId": "1561852165390082100",
+  "roleMenuChannelId": "1561830584274395225",
+  "roleMenuOptions": [
+    {
+      "label": "Radiant",
+      "value": "radiant",
+      "roleId": "1561830567899693147"
+    },
+    {
+      "label": "Immortal",
+      "value": "immortal",
+      "roleId": "1561830567899693146"
+    },
+    {
+      "label": "Ascendant",
+      "value": "ascendant",
+      "roleId": "1561830567899693145"
+    },
+    {
+      "label": "Diamond",
+      "value": "diamond",
+      "roleId": "1561830567899693144"
+    },
+    {
+      "label": "Platinum",
+      "value": "platinum",
+      "roleId": "1561830567899693143"
+    },
+    {
+      "label": "Gold",
+      "value": "gold",
+      "roleId": "1561830567899693142"
+    },
+    {
+      "label": "Silver",
+      "value": "silver",
+      "roleId": "1561830567899693141"
+    },
+    {
+      "label": "Bronze",
+      "value": "bronze",
+      "roleId": "1561830567899693140"
+    },
+    {
+      "label": "Iron",
+      "value": "iron",
+      "roleId": "1561830567899693139"
+    },
+    {
+      "label": "+18",
+      "value": "plus18",
+      "roleId": "1561830567878598699"
+    },
+    {
+      "label": "-18",
+      "value": "moins18",
+      "roleId": "1561830567878598698"
+    },
+    {
+      "label": "Femme",
+      "value": "femme",
+      "roleId": "1561830567870341129"
+    },
+    {
+      "label": "Homme",
+      "value": "homme",
+      "roleId": "1561830567870341128"
+    },
+    {
+      "label": "Majeur",
+      "value": "majeur",
+      "roleId": "1561830567870341126"
+    },
+    {
+      "label": "Mineur",
+      "value": "mineur",
+      "roleId": "1561830567870341125"
+    },
+    {
+      "label": "Notif events",
+      "value": "notif_events",
+      "roleId": "1561830567870341123"
+    },
+    {
+      "label": "Notif Giveaway",
+      "value": "notif_giveaway",
+      "roleId": "1561830567870341122"
+    },
+    {
+      "label": "Notif Annonces",
+      "value": "notif_annonces",
+      "roleId": "1561830567870341121"
+    }
+  ],
+  "rules": [
+    "Respectez tous les membres. Les insultes, le harcèlement et les discriminations sont interdits.",
+    "Pas de spam, de flood ni de publicité non autorisée.",
+    "Utilisez les salons selon leur sujet et respectez les consignes du staff.",
+    "Ne partagez pas d'informations personnelles, les vôtres ou celles d'autrui.",
+    "Les contenus illégaux, dangereux ou inappropriés sont interdits.",
+    "Les décisions de modération peuvent être contestées calmement via un ticket.",
+    "En rejoignant le serveur, vous acceptez ce règlement."
+  ]
+}
