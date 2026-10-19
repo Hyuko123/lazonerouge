@@ -4,7 +4,7 @@ Bot communautaire en **Node.js 20+ / Discord.js 14**, avec une identité visuell
 
 ## Fonctionnalités
 
-- Tickets privés avec bouton d'ouverture et de fermeture.
+- Tickets privés avec catégories, prise en charge staff, ajout de membre, transcription et fermeture confirmée.
 - Rôle automatique et message de bienvenue.
 - Menu de choix de rôles.
 - Rôle `BANNED` (masquage des salons via les permissions à configurer).
@@ -71,7 +71,7 @@ Crée un rôle `BANNED`, puis refuse-lui `View Channel` sur les catégories/salo
 Crée un rôle `MUTE` et configure les salons textuels pour refuser `Send Messages`, `Add Reactions` et les permissions d'envoi associées. Pour les salons vocaux, refuse `Speak` et `Connect`. Répète la configuration pour les catégories et salons futurs. Le bot attribue le rôle, mais ne peut pas corriger automatiquement toutes les permissions existantes.
 
 ### Tickets
-Configure `ticketCategoryId`, `ticketStaffRoleId` et `ticketPanelChannelId`. Le membre, le bot et le rôle staff doivent avoir les accès nécessaires.
+Configure `ticketCategoryId`, `ticketStaffRoleId` et `ticketPanelChannelId`. Le panneau propose l'aide, les signalements, les partenariats et les autres demandes. Dans chaque ticket, l'auteur et le staff peuvent ajouter un membre, demander une transcription des 100 derniers messages ou fermer le ticket ; seul le staff peut prendre en charge le ticket. Le membre, le bot et le rôle staff doivent avoir les accès nécessaires.
 
 ## Commandes
 

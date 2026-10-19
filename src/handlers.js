@@ -1,6 +1,7 @@
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
-  ChannelType, PermissionFlagsBits, StringSelectMenuBuilder
+  ChannelType, PermissionFlagsBits, StringSelectMenuBuilder,
+  ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 const cfg = require('../config.json');
 const store = require('./database');
@@ -8,7 +9,15 @@ const store = require('./database');
 const COLOR = 0x5865F2;
 const staffAllowed = (interaction) =>
   interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) ||
-  interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+  interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+  Boolean(cfg.ticketStaffRoleId && interaction.member?.roles?.cache?.has(cfg.ticketStaffRoleId));
+
+const ticketTypes = {
+  support: { label: 'Aide et support', emoji: '🛠️' },
+  report: { label: 'Signaler un problème', emoji: '🚩' },
+  partnership: { label: 'Partenariat', emoji: '🤝' },
+  other: { label: 'Autre demande', emoji: '💬' }
+};
 
 async function log(guild, message) {
   if (!cfg.logChannelId) return;
@@ -16,9 +25,40 @@ async function log(guild, message) {
   if (channel?.isTextBased()) channel.send({ content: message }).catch(() => {});
 }
 function ticketButtons() {
+  return new ActionRowBuilder().addComponents(Object.entries(ticketTypes).map(([type, details]) =>
+    new ButtonBuilder().setCustomId(`ticket:open:${type}`).setLabel(details.label).setStyle(ButtonStyle.Primary).setEmoji(details.emoji)
+  ));
+}
+function ticketControls(claimedUserId) {
+  const claim = new ButtonBuilder().setCustomId('ticket:claim')
+    .setLabel(claimedUserId ? 'Libérer le ticket' : 'Prendre en charge')
+    .setStyle(claimedUserId ? ButtonStyle.Secondary : ButtonStyle.Success).setEmoji('🧑‍💻');
+  return [new ActionRowBuilder().addComponents(
+    claim,
+    new ButtonBuilder().setCustomId('ticket:add-member').setLabel('Ajouter un membre').setStyle(ButtonStyle.Secondary).setEmoji('👤'),
+    new ButtonBuilder().setCustomId('ticket:transcript').setLabel('Transcription').setStyle(ButtonStyle.Secondary).setEmoji('📄'),
+    new ButtonBuilder().setCustomId('ticket:close').setLabel('Fermer').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+  )];
+}
+function closeConfirmationRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('ticket:open').setLabel('Ouvrir un ticket').setStyle(ButtonStyle.Primary).setEmoji('🎫')
+    new ButtonBuilder().setCustomId('ticket:close-confirm').setLabel('Confirmer la fermeture').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('ticket:close-cancel').setLabel('Annuler').setStyle(ButtonStyle.Secondary)
   );
+}
+function ticketOwnerId(channel) {
+  return channel?.name?.match(/^ticket-(\d+)$/)?.[1] || null;
+}
+function isTicketChannel(channel) {
+  return channel?.type === ChannelType.GuildText && channel.name.startsWith('ticket-');
+}
+function isTicketMember(interaction) {
+  return staffAllowed(interaction) || ticketOwnerId(interaction.channel) === interaction.user.id;
+}
+async function requestTicketClose(interaction) {
+  if (!isTicketChannel(interaction.channel)) return interaction.reply({ content: 'Ce salon n’est pas un ticket.', ephemeral: true });
+  if (!isTicketMember(interaction)) return interaction.reply({ content: 'Seul l’auteur du ticket ou le staff peut le fermer.', ephemeral: true });
+  return interaction.reply({ content: 'Confirmer la fermeture de ce ticket ?', components: [closeConfirmationRow()], ephemeral: true });
 }
 function giveawayRow(id) {
   return new ActionRowBuilder().addComponents(
@@ -70,10 +110,7 @@ async function handleCommand(i, client) {
       return i.reply({ content: 'Panneau de tickets publié.', ephemeral: true });
     }
     case 'ticket-close': {
-      if (!i.channel?.name?.startsWith('ticket-')) return i.reply({ content: 'Cette commande doit être utilisée dans un ticket.', ephemeral: true });
-      await i.reply('Ticket fermé. Suppression du salon dans 5 secondes.');
-      setTimeout(() => i.channel.delete('Ticket fermé').catch(()=>{}), 5000);
-      return;
+      return requestTicketClose(i);
     }
     case 'roles-panel': {
       const channel = cfg.roleMenuChannelId ? await guild.channels.fetch(cfg.roleMenuChannelId).catch(()=>null) : i.channel;
@@ -177,7 +214,9 @@ async function handleCommand(i, client) {
 }
 
 async function handleButton(i, client) {
-  if (i.customId === 'ticket:open') {
+  if (i.customId.startsWith('ticket:open')) {
+    const type = i.customId.split(':')[2] || 'support';
+    const details = ticketTypes[type] || ticketTypes.support;
     const existing = i.guild.channels.cache.find(c=>c.type===ChannelType.GuildText && c.name===`ticket-${i.user.id}`);
     if (existing) return i.reply({content:`Tu as déjà un ticket : ${existing}`,ephemeral:true});
     const overwrites = [
@@ -186,17 +225,56 @@ async function handleButton(i, client) {
       {id:client.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ManageChannels]}
     ];
     if (cfg.ticketStaffRoleId) overwrites.push({id:cfg.ticketStaffRoleId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
-    const channel = await i.guild.channels.create({name:`ticket-${i.user.id}`,type:ChannelType.GuildText,parent:cfg.ticketCategoryId || undefined,permissionOverwrites:overwrites,topic:`Ticket ouvert par ${i.user.tag} (${i.user.id})`});
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket:close').setLabel('Fermer le ticket').setStyle(ButtonStyle.Danger));
-    await channel.send({content:`${i.user} Bienvenue ! Décris ta demande. ${cfg.ticketStaffRoleId?`<@&${cfg.ticketStaffRoleId}>`:''}`,components:[row]});
+    const channel = await i.guild.channels.create({name:`ticket-${i.user.id}`,type:ChannelType.GuildText,parent:cfg.ticketCategoryId || undefined,permissionOverwrites:overwrites,topic:`Ticket ouvert par ${i.user.tag} (${i.user.id}) | Type: ${details.label}`});
+    const embed = new EmbedBuilder().setColor(COLOR).setTitle(`${details.emoji} ${details.label}`)
+      .setDescription(`Bonjour ${i.user}, décris ta demande en détail. Le staff pourra prendre en charge ce ticket, ajouter un membre ou joindre une transcription.`)
+      .setFooter({ text: `Ouvert par ${i.user.tag}` }).setTimestamp();
+    await channel.send({content:cfg.ticketStaffRoleId?`<@&${cfg.ticketStaffRoleId}>`:'',embeds:[embed],components:ticketControls()});
     return i.reply({content:`Ton ticket est créé : ${channel}`,ephemeral:true});
   }
   if (i.customId === 'ticket:close') {
-    if (!i.channel.name.startsWith('ticket-')) return i.reply({content:'Ce salon n’est pas un ticket.',ephemeral:true});
-    if (!staffAllowed(i) && i.channel.topic && !i.channel.topic.includes(i.user.id)) return i.reply({content:'Seul l’auteur du ticket ou le staff peut le fermer.',ephemeral:true});
-    await i.reply('Ticket fermé. Suppression dans 5 secondes.');
-    setTimeout(()=>i.channel.delete('Ticket fermé').catch(()=>{}),5000);
+    return requestTicketClose(i);
+  }
+  if (i.customId === 'ticket:close-cancel') {
+    return i.update({ content: 'Fermeture annulée.', components: [] });
+  }
+  if (i.customId === 'ticket:close-confirm') {
+    if (!isTicketChannel(i.channel)) return i.reply({ content: 'Ce salon n’est plus un ticket.', ephemeral: true });
+    if (!isTicketMember(i)) return i.reply({ content: 'Seul l’auteur du ticket ou le staff peut le fermer.', ephemeral: true });
+    await i.update({ content: 'Ticket fermé. Suppression du salon dans 5 secondes.', components: [] });
+    setTimeout(()=>i.channel.delete(`Ticket fermé par ${i.user.tag}`).catch(()=>{}),5000);
     return;
+  }
+  if (i.customId === 'ticket:claim') {
+    if (!isTicketChannel(i.channel)) return i.reply({ content: 'Ce salon n’est pas un ticket.', ephemeral: true });
+    if (!staffAllowed(i)) return i.reply({ content: 'Seul le staff peut prendre en charge un ticket.', ephemeral: true });
+    const claimedId = i.channel.topic?.match(/\| Pris en charge: (\d+)/)?.[1];
+    if (claimedId && claimedId !== i.user.id) return i.reply({ content: `Ce ticket est déjà pris en charge par <@${claimedId}>.`, ephemeral: true });
+    const nextClaimedId = claimedId ? null : i.user.id;
+    const topic = (i.channel.topic || '').replace(/ \| Pris en charge: \d+/, '');
+    await i.channel.setTopic(nextClaimedId ? `${topic} | Pris en charge: ${nextClaimedId}` : topic);
+    await i.update({ components: ticketControls(nextClaimedId) });
+    return i.followUp({ content: nextClaimedId ? `Ticket pris en charge par ${i.user}.` : 'Tu as libéré ce ticket.', ephemeral: true });
+  }
+  if (i.customId === 'ticket:add-member') {
+    if (!isTicketChannel(i.channel)) return i.reply({ content: 'Ce salon n’est pas un ticket.', ephemeral: true });
+    if (!isTicketMember(i)) return i.reply({ content: 'Seul l’auteur du ticket ou le staff peut ajouter un membre.', ephemeral: true });
+    const modal = new ModalBuilder().setCustomId('ticket:add-member-modal').setTitle('Ajouter un membre au ticket');
+    const input = new TextInputBuilder().setCustomId('member').setLabel('ID ou mention Discord')
+      .setPlaceholder('Exemple : 123456789012345678').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(32);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return i.showModal(modal);
+  }
+  if (i.customId === 'ticket:transcript') {
+    if (!isTicketChannel(i.channel)) return i.reply({ content: 'Ce salon n’est pas un ticket.', ephemeral: true });
+    if (!isTicketMember(i)) return i.reply({ content: 'Seul l’auteur du ticket ou le staff peut consulter la transcription.', ephemeral: true });
+    const messages = await i.channel.messages.fetch({ limit: 100 });
+    const transcript = [...messages.values()].reverse().map(message => {
+      const content = message.content || '';
+      const attachments = [...message.attachments.values()].map(file => file.url).join(' ');
+      return `[${message.createdAt.toISOString()}] ${message.author.tag}: ${content}${attachments ? ` ${attachments}` : ''}`;
+    }).join('\n');
+    return i.reply({ content: 'Transcription des 100 derniers messages :', files: [{ attachment: Buffer.from(transcript || 'Aucun message.'), name: `${i.channel.name}-transcription.txt` }], ephemeral: true });
   }
   if (i.customId.startsWith('giveaway:join:')) {
     const id = i.customId.split(':')[2];
@@ -205,6 +283,21 @@ async function handleButton(i, client) {
     store.addEntry.run(id,i.user.id);
     return i.reply({content:'Participation enregistrée ! Bonne chance 🍀',ephemeral:true});
   }
+}
+async function handleModal(i) {
+  if (i.customId !== 'ticket:add-member-modal') return;
+  if (!isTicketChannel(i.channel) || !isTicketMember(i)) return i.reply({ content: 'Tu ne peux pas ajouter de membre à ce ticket.', ephemeral: true });
+  const input = i.fields.getTextInputValue('member').trim();
+  const match = input.match(/^(?:<@!?(\d+)>|(\d+))$/);
+  const userId = match?.[1] || match?.[2];
+  if (!userId) return i.reply({ content: 'Entre une mention Discord valide ou un ID numérique.', ephemeral: true });
+  const member = await i.guild.members.fetch(userId).catch(() => null);
+  if (!member) return i.reply({ content: 'Ce membre est introuvable sur le serveur.', ephemeral: true });
+  await i.channel.permissionOverwrites.edit(member.id, {
+    ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true
+  });
+  await i.channel.send(`${member} a été ajouté au ticket par ${i.user}.`);
+  return i.reply({ content: `${member.user.tag} peut maintenant accéder au ticket.`, ephemeral: true });
 }
 async function handleSelect(i) {
   if (i.customId !== 'roles:select') return;
@@ -222,4 +315,4 @@ async function handleSelect(i) {
   }
   return i.reply({content:changes.length?`Choix mis à jour : ${changes.join(', ')}`:'Aucun changement.',ephemeral:true});
 }
-module.exports = { handleCommand, handleButton, handleSelect, finishGiveaway };
+module.exports = { handleCommand, handleButton, handleSelect, handleModal, finishGiveaway };

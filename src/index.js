@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('node:fs');
 const { Client, GatewayIntentBits, Events, EmbedBuilder } = require('discord.js');
-const { handleCommand, handleButton, handleSelect, finishGiveaway } = require('./handlers');
+const { handleCommand, handleButton, handleSelect, handleModal, finishGiveaway } = require('./handlers');
 const store = require('./database');
 
 if (!process.env.DISCORD_TOKEN) {
@@ -49,6 +49,7 @@ client.on(Events.InteractionCreate, async i => {
     if (i.isChatInputCommand()) await handleCommand(i, client);
     else if (i.isButton()) await handleButton(i, client);
     else if (i.isStringSelectMenu()) await handleSelect(i);
+    else if (i.isModalSubmit()) await handleModal(i);
   } catch (error) {
     console.error(error);
     const message = 'Une erreur est survenue. Vérifie la configuration et les permissions du bot.';
