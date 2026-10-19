@@ -40,6 +40,14 @@ CREATE TABLE IF NOT EXISTS role_panel_messages (
   message_id TEXT NOT NULL UNIQUE,
   PRIMARY KEY (guild_id, category)
 );
+CREATE TABLE IF NOT EXISTS temporary_bans (
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  banned_by TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  PRIMARY KEY (guild_id, user_id)
+);
 `);
 
 module.exports = {
@@ -61,5 +69,10 @@ module.exports = {
   saveRolePanel: db.prepare(`INSERT INTO role_panel_messages(guild_id, category, channel_id, message_id)
     VALUES(?, ?, ?, ?) ON CONFLICT(guild_id, category) DO UPDATE SET channel_id=excluded.channel_id, message_id=excluded.message_id`),
   getRolePanel: db.prepare('SELECT * FROM role_panel_messages WHERE message_id = ?'),
-  deleteRolePanel: db.prepare('DELETE FROM role_panel_messages WHERE message_id = ?')
+  deleteRolePanel: db.prepare('DELETE FROM role_panel_messages WHERE message_id = ?'),
+  setTemporaryBan: db.prepare(`INSERT INTO temporary_bans(guild_id, user_id, reason, banned_by, expires_at)
+    VALUES(?, ?, ?, ?, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET reason=excluded.reason, banned_by=excluded.banned_by, expires_at=excluded.expires_at`),
+  getTemporaryBan: db.prepare('SELECT * FROM temporary_bans WHERE guild_id = ? AND user_id = ?'),
+  expiredTemporaryBans: db.prepare('SELECT * FROM temporary_bans WHERE expires_at <= ?'),
+  deleteTemporaryBan: db.prepare('DELETE FROM temporary_bans WHERE guild_id = ? AND user_id = ?')
 };

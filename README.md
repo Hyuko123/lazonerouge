@@ -59,7 +59,7 @@ Le dépôt contient `render.yaml` pour créer un **Background Worker**. C'est un
 - Scopes OAuth2 : `bot` et `applications.commands`.
 - Active **Server Members Intent** pour le rôle automatique et le message de bienvenue.
 - Place le rôle du bot au-dessus des rôles qu'il doit attribuer ou retirer.
-- Accorde uniquement les permissions nécessaires : gérer les rôles, gérer les salons, ajouter des réactions, envoyer des messages, intégrer des liens, lire l'historique, expulser si nécessaire.
+- Accorde uniquement les permissions nécessaires : bannir des membres, gérer les rôles, gérer les salons, ajouter des réactions, envoyer des messages, intégrer des liens, lire l'historique, expulser si nécessaire.
 - Les commandes slash n'ont pas besoin de l'intent Message Content.
 
 ## Configuration des permissions
@@ -70,6 +70,9 @@ Crée un rôle `BANNED`, puis refuse-lui `View Channel` sur les catégories/salo
 ### Rôle `MUTE`
 Crée un rôle `MUTE` et configure les salons textuels pour refuser `Send Messages`, `Add Reactions` et les permissions d'envoi associées. Pour les salons vocaux, refuse `Speak` et `Connect`. Répète la configuration pour les catégories et salons futurs. Le bot attribue le rôle, mais ne peut pas corriger automatiquement toutes les permissions existantes.
 
+### Bannissements
+La commande `/ban` demande un joueur, une raison et une durée (`30m`, `12h`, `7j`, ou `permanent`). Un message privé récapitule la décision et l’échéance. Les durées temporaires sont enregistrées en SQLite et le débannissement est exécuté automatiquement, même après un redémarrage du bot. Le bot doit avoir `Ban Members`.
+
 ### Tickets
 Configure `ticketCategoryId`, `ticketStaffRoleId` et `ticketPanelChannelId`. Le panneau propose l'aide, les signalements, les partenariats et les autres demandes. Dans chaque ticket, l'auteur et le staff peuvent ajouter un membre, demander une transcription des 100 derniers messages (envoyée en MP au propriétaire) ou fermer le ticket ; seul le staff peut prendre en charge le ticket. Le membre, le bot et le rôle staff doivent avoir les accès nécessaires.
 
@@ -78,26 +81,6 @@ Configure `onboardingChannelId` pour publier le panneau d'arrivée. `memberRoleI
 
 ### Annonces
 Configure `announcementPanelChannelId` pour le panneau staff, `announcementChannelId` pour la destination des annonces et `announcementStaffRoleId` pour autoriser l’usage du bouton. La publication du panneau lui-même reste réservée aux membres ayant `ManageGuild`.
-
-### Rôles par réactions
-Chaque entrée de `roleMenuOptions` doit avoir `label`, `value`, `emoji`, `category` et `roleId`. Utilise `rang`, `profil` ou `notifications` comme catégorie, et un emoji unique par rôle. Le bot doit pouvoir voir l'historique du salon, ajouter des réactions et gérer les rôles ; place son rôle au-dessus des rôles distribués. `/panneau-roles-rang`, `/panneau-roles-profil` et `/panneau-roles-notifications` publient trois messages distincts. Cliquer/retirer une réaction ajoute/retire le rôle correspondant.
-
-## Commandes
-
-- `/aide`
-- `/panneau-tickets`
-- `/fermer-ticket`
-- `/panneau-roles-rang`
-- `/panneau-roles-profil`
-- `/panneau-roles-notifications`
-- `/publier-reglement`
-- `/panneau-annonces`
-- `/annonce`
-- `/riot-id`
-- `/valorant`
-- `/concours-creer`
-- `/concours-terminer`
-- `/concours-relancer`
 - `/role-bannir`
 - `/role-debannir`
 - `/role-muter`

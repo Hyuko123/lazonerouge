@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('node:fs');
 const { Client, GatewayIntentBits, Events, EmbedBuilder, Partials } = require('discord.js');
-const { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, onboardingRow } = require('./handlers');
+const { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, processExpiredBans, onboardingRow } = require('./handlers');
 const store = require('./database');
 
 if (!process.env.DISCORD_TOKEN) {
@@ -29,11 +29,13 @@ client.once(Events.ClientReady, async c => {
   for (const g of store.activeGiveaways.all()) {
     if (g.ends_at <= Date.now()) await finishGiveaway(client, g.message_id).catch(console.error);
   }
+  await processExpiredBans(client);
   setInterval(async () => {
     for (const g of store.activeGiveaways.all()) {
       if (g.ends_at <= Date.now()) await finishGiveaway(client, g.message_id).catch(console.error);
     }
   }, 15000);
+  setInterval(() => processExpiredBans(client).catch(console.error), 60000);
 });
 
 client.on(Events.GuildMemberAdd, async member => {

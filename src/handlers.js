@@ -43,7 +43,7 @@ const rolePanelCategories = {
 async function log(guild, message) {
   if (!cfg.logChannelId) return;
   const channel = await guild.channels.fetch(cfg.logChannelId).catch(() => null);
-  if (channel?.isTextBased()) channel.send({ content: message }).catch(() => {});
+  if (channel?.isTextBased()) channel.send({ content: message, allowedMentions: { parse: [] } }).catch(() => {});
 }
 async function sendAnnouncement(guild, author, title, content, fallbackChannel) {
   const channel = cfg.announcementChannelId
@@ -70,6 +70,107 @@ function onboardingRow(userId) {
 }
 function isValidRiotId(riotId) {
   return /^.{1,32}#[^#\s]{1,16}$/u.test(riotId);
+}
+function parseBanDuration(input) {
+  const value = input.trim().toLowerCase();
+  if (['permanent', 'permanente', 'perm', 'illimite', 'illimité'].includes(value)) {
+    return { expiresAt: null, label: 'Permanent' };
+  }
+  const match = value.match(/^(\d{1,5})\s*(m|min|mins|minute|minutes|h|hr|heure|heures|d|j|jour|jours|w|sem|semaine|semaines)$/);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const unit = match[2];
+  const isMinute = ['m', 'min', 'mins', 'minute', 'minutes'].includes(unit);
+  const isHour = ['h', 'hr', 'heure', 'heures'].includes(unit);
+  const isWeek = ['w', 'sem', 'semaine', 'semaines'].includes(unit);
+  const factor = isMinute ? 60000 : isHour ? 3600000 : isWeek ? 604800000 : 86400000;
+  const unitLabel = isMinute ? 'minute' : isHour ? 'heure' : isWeek ? 'semaine' : 'jour';
+  const milliseconds = amount * factor;
+  if (!amount || milliseconds > 3650 * 86400000) return null;
+  return {
+    expiresAt: Date.now() + milliseconds,
+    label: `${amount} ${unitLabel}${amount > 1 ? 's' : ''}`
+  };
+}
+function banNotificationEmbed(guild, target, reason, duration, moderator) {
+  const endDate = duration.expiresAt
+    ? `<t:${Math.floor(duration.expiresAt / 1000)}:F> (<t:${Math.floor(duration.expiresAt / 1000)}:R>)`
+    : 'Aucune date de fin définie.';
+  const durationInfo = duration.expiresAt
+    ? `La mesure prendra fin automatiquement à l’échéance indiquée ci-dessous. Un nouveau lien d’invitation pourra être nécessaire pour rejoindre le serveur.`
+    : 'Le bannissement est permanent et restera actif jusqu’à une éventuelle révision par l’équipe de modération.';
+  return new EmbedBuilder().setColor(0xB42318).setTitle(`Notification de bannissement — ${guild.name}`)
+    .setDescription([
+      `Bonjour ${target.username},`,
+      '',
+      'Après examen de la situation, l’équipe de modération a décidé de vous retirer l’accès à ce serveur. Cette notification précise le motif communiqué et la durée de la mesure.',
+      '',
+      durationInfo,
+      '',
+      'Si vous estimez qu’il s’agit d’une erreur, vous pouvez demander un réexamen au staff par le moyen de contact ou de recours prévu par le serveur.'
+    ].join('\n'))
+    .addFields(
+      { name: 'Raison', value: reason.slice(0, 1024) },
+      { name: 'Durée', value: duration.label, inline: true },
+      { name: 'Fin prévue', value: endDate, inline: true },
+      { name: 'Décision prise par', value: moderator.tag }
+    )
+    .setFooter({ text: 'Message automatique de l’équipe de modération' }).setTimestamp();
+}
+async function banMember(interaction) {
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.BanMembers)) {
+    return interaction.reply({ content: 'Tu n’as pas la permission de bannir des membres.', ephemeral: true });
+  }
+  const target = interaction.options.getUser('joueur');
+  const reason = interaction.options.getString('raison').trim();
+  const duration = parseBanDuration(interaction.options.getString('duree'));
+  if (!duration) return interaction.reply({ content: 'Durée invalide. Utilise par exemple `30m`, `12h`, `7j` ou `permanent` (maximum : 10 ans).', ephemeral: true });
+  if (!reason) return interaction.reply({ content: 'La raison du bannissement ne peut pas être vide.', ephemeral: true });
+  if (target.id === interaction.user.id) return interaction.reply({ content: 'Tu ne peux pas te bannir toi-même.', ephemeral: true });
+
+  await interaction.deferReply({ ephemeral: true });
+  const previous = store.getTemporaryBan.get(interaction.guild.id, target.id);
+  if (duration.expiresAt) {
+    store.setTemporaryBan.run(interaction.guild.id, target.id, reason, interaction.user.id, duration.expiresAt);
+  } else {
+    store.deleteTemporaryBan.run(interaction.guild.id, target.id);
+  }
+  try {
+    await interaction.guild.members.ban(target.id, {
+      reason: `Banni par ${interaction.user.tag}: ${reason}`.slice(0, 512)
+    });
+  } catch (error) {
+    if (previous) store.setTemporaryBan.run(previous.guild_id, previous.user_id, previous.reason, previous.banned_by, previous.expires_at);
+    else store.deleteTemporaryBan.run(interaction.guild.id, target.id);
+    console.error('Échec du bannissement Discord.', error);
+    return interaction.editReply('Le bannissement a échoué. Vérifie que le bot a la permission « Bannir des membres » et que sa hiérarchie de rôles le permet.');
+  }
+
+  const embed = banNotificationEmbed(interaction.guild, target, reason, duration, interaction.user);
+  const notified = await target.send({ embeds: [embed], allowedMentions: { parse: [] } }).then(() => true).catch(() => false);
+  await log(interaction.guild, `🔨 ${target.tag} banni par ${interaction.user.tag} (${duration.label}). Raison : ${reason}`);
+  const end = duration.expiresAt ? ` jusqu’au <t:${Math.floor(duration.expiresAt / 1000)}:F>` : ' de façon permanente';
+  return interaction.editReply(`${target.tag} a été banni${end}. ${notified ? 'La notification privée a été envoyée.' : 'Ses MP sont fermés : la notification privée n’a pas pu être envoyée.'}`);
+}
+async function processExpiredBans(client) {
+  for (const ban of store.expiredTemporaryBans.all(Date.now())) {
+    const guild = await client.guilds.fetch(ban.guild_id).catch(error => {
+      console.error(`Impossible de charger le serveur ${ban.guild_id} pour le débannissement automatique.`, error);
+      return null;
+    });
+    if (!guild) continue;
+    try {
+      await guild.members.unban(ban.user_id, 'Fin du bannissement temporaire');
+      store.deleteTemporaryBan.run(ban.guild_id, ban.user_id);
+      await log(guild, `⏱️ Le bannissement temporaire de <@${ban.user_id}> est arrivé à échéance.`);
+    } catch (error) {
+      if (error.code === 10026 || error.status === 404) {
+        store.deleteTemporaryBan.run(ban.guild_id, ban.user_id);
+      } else {
+        console.error(`Échec du débannissement automatique de ${ban.user_id}. Il sera réessayé.`, error);
+      }
+    }
+  }
 }
 function ticketMenu() {
   const menu = new StringSelectMenuBuilder().setCustomId('ticket:create')
@@ -212,7 +313,7 @@ async function handleCommand(i, client) {
       const embed = new EmbedBuilder().setColor(COLOR).setTitle('📚 Commandes du bot').setDescription([
         '**Général**', '`/aide` `/riot-id` `/valorant`',
         '**Tickets & rôles**', '`/panneau-tickets` `/fermer-ticket` `/panneau-roles-rang` `/panneau-roles-profil` `/panneau-roles-notifications`',
-        '**Modération**', '`/role-bannir` `/role-debannir` `/role-muter` `/role-demuter` `/expulser` `/nettoyer`',
+        '**Modération**', '`/ban` `/role-bannir` `/role-debannir` `/role-muter` `/role-demuter` `/expulser` `/nettoyer`',
         '**Communauté**', '`/publier-reglement` `/panneau-annonces` `/annonce`',
         '**Concours**', '`/concours-creer` `/concours-terminer` `/concours-relancer`'
       ].join('\n')).setFooter({ text: 'Les commandes de gestion nécessitent les permissions appropriées.' });
@@ -313,6 +414,9 @@ async function handleCommand(i, client) {
       const ch = await client.channels.fetch(g.channel_id).catch(()=>null);
       await ch?.send(`🔁 Nouveau tirage pour **${g.prize}** : ${winners.map(id=>`<@${id}>`).join(', ')}`);
       return i.reply({content:'Nouveau tirage effectué.',ephemeral:true});
+    }
+    case 'ban': {
+      return banMember(i);
     }
     case 'role-bannir':
     case 'role-debannir':
@@ -515,4 +619,4 @@ async function handleReaction(reaction, user, added) {
   if (added) await member.roles.add(role, 'Rôle attribué par réaction');
   else await member.roles.remove(role, 'Rôle retiré par réaction');
 }
-module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, onboardingRow };
+module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, processExpiredBans, parseBanDuration, onboardingRow };
