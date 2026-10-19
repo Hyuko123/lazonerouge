@@ -3,14 +3,21 @@ const {
   ChannelType, PermissionFlagsBits, StringSelectMenuBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
-const cfg = require('../config.json');
 const store = require('./database');
 
 const COLOR = 0x5865F2;
+let cfg = {};
+function configureHandlers(config) {
+  cfg = config;
+}
 const staffAllowed = (interaction) =>
   interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) ||
   interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
   Boolean(cfg.ticketStaffRoleId && interaction.member?.roles?.cache?.has(cfg.ticketStaffRoleId));
+const announcementStaffAllowed = (interaction) =>
+  interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) ||
+  interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+  Boolean(cfg.announcementStaffRoleId && interaction.member?.roles?.cache?.has(cfg.announcementStaffRoleId));
 
 const ticketTypes = {
   support: { label: 'Aide et support', emoji: '🛠️' },
@@ -24,10 +31,40 @@ async function log(guild, message) {
   const channel = await guild.channels.fetch(cfg.logChannelId).catch(() => null);
   if (channel?.isTextBased()) channel.send({ content: message }).catch(() => {});
 }
-function ticketButtons() {
-  return new ActionRowBuilder().addComponents(Object.entries(ticketTypes).map(([type, details]) =>
-    new ButtonBuilder().setCustomId(`ticket:open:${type}`).setLabel(details.label).setStyle(ButtonStyle.Primary).setEmoji(details.emoji)
-  ));
+async function sendAnnouncement(guild, author, title, content, fallbackChannel) {
+  const channel = cfg.announcementChannelId
+    ? await guild.channels.fetch(cfg.announcementChannelId).catch(() => null)
+    : fallbackChannel;
+  if (!channel?.isTextBased()) return null;
+  const embed = new EmbedBuilder().setColor(0xD94343).setAuthor({ name: 'Annonce officielle' })
+    .setTitle(title).setDescription(content).setFooter({ text: `Publié par ${author.username} · ${guild.name}` })
+    .setTimestamp();
+  const message = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+  await log(guild, `📣 Annonce publiée par ${author.tag} dans ${channel}.`);
+  return message;
+}
+function announcementPanelRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('announcement:create').setLabel('Rédiger une annonce').setStyle(ButtonStyle.Primary).setEmoji('📣')
+  );
+}
+function onboardingRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`welcome:riot:${userId}`).setLabel('Enregistrer mon Riot ID').setStyle(ButtonStyle.Secondary).setEmoji('🎮'),
+    new ButtonBuilder().setCustomId(`welcome:accept:${userId}`).setLabel('Accepter le règlement').setStyle(ButtonStyle.Success).setEmoji('✅')
+  );
+}
+function isValidRiotId(riotId) {
+  return /^.{1,32}#[^#\s]{1,16}$/u.test(riotId);
+}
+function ticketMenu() {
+  const menu = new StringSelectMenuBuilder().setCustomId('ticket:create')
+    .setPlaceholder('Choisis le motif de ta demande').setMinValues(1).setMaxValues(1)
+    .addOptions(Object.entries(ticketTypes).map(([type, details]) => ({
+      label: details.label, value: type, emoji: details.emoji,
+      description: `Créer un ticket : ${details.label.toLowerCase()}`
+    })));
+  return new ActionRowBuilder().addComponents(menu);
 }
 function ticketControls(claimedUserId) {
   const claim = new ButtonBuilder().setCustomId('ticket:claim')
@@ -47,7 +84,12 @@ function closeConfirmationRow() {
   );
 }
 function ticketOwnerId(channel) {
-  return channel?.name?.match(/^ticket-(\d+)$/)?.[1] || null;
+  return channel?.topic?.match(/\((\d+)\)/)?.[1] || channel?.name?.match(/^ticket-(\d+)$/)?.[1] || null;
+}
+function ticketName(username, userId) {
+  const slug = username.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'membre';
+  return `ticket-${slug}-${userId.slice(-4)}`;
 }
 function isTicketChannel(channel) {
   return channel?.type === ChannelType.GuildText && channel.name.startsWith('ticket-');
@@ -60,6 +102,31 @@ async function requestTicketClose(interaction) {
   if (!isTicketMember(interaction)) return interaction.reply({ content: 'Seul l’auteur du ticket ou le staff peut le fermer.', ephemeral: true });
   return interaction.reply({ content: 'Confirmer la fermeture de ce ticket ?', components: [closeConfirmationRow()], ephemeral: true });
 }
+async function openTicket(interaction, client, type) {
+  const details = ticketTypes[type] || ticketTypes.support;
+  const existing = interaction.guild.channels.cache.find(channel =>
+    channel.type === ChannelType.GuildText && ticketOwnerId(channel) === interaction.user.id
+  );
+  if (existing) return interaction.reply({ content: `Tu as déjà un ticket : ${existing}`, ephemeral: true });
+  const overwrites = [
+    { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
+    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
+  ];
+  if (cfg.ticketStaffRoleId) overwrites.push({ id: cfg.ticketStaffRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+  const channel = await interaction.guild.channels.create({
+    name: ticketName(interaction.user.username, interaction.user.id),
+    type: ChannelType.GuildText,
+    parent: cfg.ticketCategoryId || undefined,
+    permissionOverwrites: overwrites,
+    topic: `Ticket ouvert par ${interaction.user.tag} (${interaction.user.id}) | Type: ${details.label}`
+  });
+  const embed = new EmbedBuilder().setColor(COLOR).setTitle(`${details.emoji} ${details.label}`)
+    .setDescription(`Bonjour ${interaction.user}, décris ta demande en détail. Le staff pourra prendre en charge ce ticket, ajouter un membre ou t’envoyer une transcription en message privé.`)
+    .setFooter({ text: `Ticket de ${interaction.user.username}` }).setTimestamp();
+  await channel.send({ content: cfg.ticketStaffRoleId ? `<@&${cfg.ticketStaffRoleId}>` : '', embeds: [embed], components: ticketControls() });
+  return interaction.reply({ content: `Ton ticket est créé : ${channel}`, ephemeral: true });
+}
 function giveawayRow(id) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`giveaway:join:${id}`).setLabel('Participer').setStyle(ButtonStyle.Success).setEmoji('🎉')
@@ -67,7 +134,8 @@ function giveawayRow(id) {
 }
 async function finishGiveaway(client, messageId, forceChannelId) {
   const g = store.getGiveaway.get(messageId);
-  if (!g || g.ended) return { ok: false, message: 'Giveaway introuvable ou déjà terminé.' };
+  if (!g || g.ended) return { ok: false, message: 'Concours introuvable ou déjà terminé.' };
+  if (!store.claimGiveawayFinish.run(messageId).changes) return { ok: false, message: 'Ce concours vient déjà d’être terminé.' };
   const channel = await client.channels.fetch(forceChannelId || g.channel_id).catch(() => null);
   const entries = store.entries.all(messageId).map(x => x.user_id);
   const winners = [];
@@ -75,17 +143,16 @@ async function finishGiveaway(client, messageId, forceChannelId) {
   while (pool.length && winners.length < g.winners) {
     winners.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   }
-  store.endGiveaway.run(messageId);
   if (channel?.isTextBased()) {
     const original = await channel.messages.fetch(messageId).catch(() => null);
     if (original) {
-      const embed = EmbedBuilder.from(original.embeds[0] || new EmbedBuilder().setTitle('Giveaway'))
-        .setColor(0x747F8D).setFooter({ text: 'Giveaway terminé' });
+      const embed = EmbedBuilder.from(original.embeds[0] || new EmbedBuilder().setTitle('Concours'))
+        .setColor(0x747F8D).setFooter({ text: 'Concours terminé' });
       await original.edit({ embeds: [embed], components: [] }).catch(() => {});
     }
     await channel.send(winners.length
-      ? `🎉 Giveaway terminé ! Lot : **${g.prize}** — gagnant(s) : ${winners.map(id => `<@${id}>`).join(', ')}`
-      : `Giveaway terminé pour **${g.prize}** : aucune participation.`).catch(() => {});
+      ? `🎉 Concours terminé ! Lot : **${g.prize}** — gagnant(s) : ${winners.map(id => `<@${id}>`).join(', ')}`
+      : `Concours terminé pour **${g.prize}** : aucune participation.`).catch(() => {});
   }
   return { ok: true, winners };
 }
@@ -93,26 +160,40 @@ async function finishGiveaway(client, messageId, forceChannelId) {
 async function handleCommand(i, client) {
   const guild = i.guild;
   switch (i.commandName) {
-    case 'help': {
+    case 'aide': {
       const embed = new EmbedBuilder().setColor(COLOR).setTitle('📚 Commandes du bot').setDescription([
-        '**Général**', '`/help` `/riotid` `/valorant`',
-        '**Tickets & rôles**', '`/ticket-panel` `/ticket-close` `/roles-panel`',
-        '**Modération**', '`/ban-role` `/unban-role` `/mute-role` `/unmute-role` `/kick` `/clear`',
-        '**Communauté**', '`/rules` `/announce`',
-        '**Giveaways**', '`/giveaway-create` `/giveaway-end` `/giveaway-reroll`'
+        '**Général**', '`/aide` `/riot-id` `/valorant`',
+        '**Tickets & rôles**', '`/panneau-tickets` `/fermer-ticket` `/panneau-roles`',
+        '**Modération**', '`/role-bannir` `/role-debannir` `/role-muter` `/role-demuter` `/expulser` `/nettoyer`',
+        '**Communauté**', '`/publier-reglement` `/panneau-annonces` `/annonce`',
+        '**Concours**', '`/concours-creer` `/concours-terminer` `/concours-relancer`'
       ].join('\n')).setFooter({ text: 'Les commandes de gestion nécessitent les permissions appropriées.' });
       return i.reply({ embeds: [embed], ephemeral: true });
     }
-    case 'ticket-panel': {
+    case 'panneau-tickets': {
       const channel = cfg.ticketPanelChannelId ? await guild.channels.fetch(cfg.ticketPanelChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon de tickets valide.', ephemeral: true });
-      await channel.send({ embeds: [new EmbedBuilder().setColor(COLOR).setTitle('🎫 Centre de support').setDescription('Clique sur le bouton ci-dessous pour créer un salon privé avec le staff.')], components: [ticketButtons()] });
+      const panel = new EmbedBuilder().setColor(COLOR).setTitle('🎫 Centre d’assistance')
+        .setDescription([
+          'Besoin d’aide ou envie de contacter l’équipe ? Ouvre une demande privée : seuls toi et les personnes autorisées pourront lire la conversation.',
+          '',
+          '**Avant d’ouvrir un ticket**',
+          '• Choisis le motif le plus proche de ta demande dans le menu ci-dessous.',
+          '• Explique clairement la situation et ajoute les captures ou liens utiles.',
+          '• Le staff te répondra directement dans ce salon privé. Pense à activer les notifications.',
+          '',
+          '**Demandes disponibles**',
+          '🛠️ Aide et support · 🚩 Signalement · 🤝 Partenariat · 💬 Autre demande',
+          '',
+          'Un seul ticket ouvert par membre. Merci de ne pas créer plusieurs demandes pour le même sujet.'
+        ].join('\n')).setFooter({ text: 'Le staff ne te demandera jamais ton mot de passe ou un code de connexion.' });
+      await channel.send({ embeds: [panel], components: [ticketMenu()] });
       return i.reply({ content: 'Panneau de tickets publié.', ephemeral: true });
     }
-    case 'ticket-close': {
+    case 'fermer-ticket': {
       return requestTicketClose(i);
     }
-    case 'roles-panel': {
+    case 'panneau-roles': {
       const channel = cfg.roleMenuChannelId ? await guild.channels.fetch(cfg.roleMenuChannelId).catch(()=>null) : i.channel;
       const options = (cfg.roleMenuOptions || []).filter(x=>x.roleId).slice(0,25).map(x=>({label:x.label,value:x.value,description:`Recevoir le rôle ${x.label}`.slice(0,100)}));
       if (!channel?.isTextBased() || !options.length) return i.reply({ content: 'Configure roleMenuChannelId et au moins un roleId dans config.json.', ephemeral: true });
@@ -120,24 +201,30 @@ async function handleCommand(i, client) {
       await channel.send({ embeds:[new EmbedBuilder().setColor(COLOR).setTitle('🎭 Choix des rôles').setDescription('Sélectionne les rôles que tu souhaites recevoir. Tu peux modifier ton choix plus tard.')], components:[new ActionRowBuilder().addComponents(menu)] });
       return i.reply({ content:'Menu de rôles publié.', ephemeral:true });
     }
-    case 'rules': {
+    case 'publier-reglement': {
       const channel = cfg.rulesChannelId ? await guild.channels.fetch(cfg.rulesChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({content:'Configure rulesChannelId.',ephemeral:true});
       const description = (cfg.rules || []).map((r,n)=>`**${n+1}.** ${r}`).join('\n\n').slice(0,4000);
       await channel.send({embeds:[new EmbedBuilder().setColor(COLOR).setTitle('📜 Règlement du serveur').setDescription(description)]});
       return i.reply({content:'Règlement publié.',ephemeral:true});
     }
-    case 'announce': {
-      const channel = cfg.announcementChannelId ? await guild.channels.fetch(cfg.announcementChannelId).catch(()=>null) : i.channel;
-      if (!channel?.isTextBased()) return i.reply({content:'Configure announcementChannelId.',ephemeral:true});
-      const embed = new EmbedBuilder().setColor(COLOR).setTitle(i.options.getString('titre')).setDescription(i.options.getString('message')).setFooter({text:`Annonce de ${i.user.username}`}).setTimestamp();
-      await channel.send({embeds:[embed]});
-      await log(guild, `📣 Annonce publiée par ${i.user.tag} dans ${channel}.`);
+    case 'panneau-annonces': {
+      const channel = cfg.announcementPanelChannelId ? await guild.channels.fetch(cfg.announcementPanelChannelId).catch(() => null) : i.channel;
+      if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon valide pour le panneau staff des annonces.', ephemeral: true });
+      const embed = new EmbedBuilder().setColor(0xD94343).setTitle('📣 Centre des annonces')
+        .setDescription('Utilise le bouton ci-dessous pour rédiger une annonce destinée au serveur. Elle sera publiée dans le salon configuré, avec une mise en forme uniforme.')
+        .setFooter({ text: 'Réservé au staff' });
+      await channel.send({ embeds: [embed], components: [announcementPanelRow()] });
+      return i.reply({ content: 'Panneau staff publié.', ephemeral: true });
+    }
+    case 'annonce': {
+      const message = await sendAnnouncement(guild, i.user, i.options.getString('titre'), i.options.getString('message'), i.channel);
+      if (!message) return i.reply({content:'Configure un salon d’annonces valide.',ephemeral:true});
       return i.reply({content:'Annonce publiée.',ephemeral:true});
     }
-    case 'riotid': {
+    case 'riot-id': {
       const riotId = i.options.getString('riot_id').trim();
-      if (!/^.{1,32}#[^#\s]{1,16}$/.test(riotId)) return i.reply({content:'Format invalide. Exemple : Pseudo#TAG',ephemeral:true});
+      if (!isValidRiotId(riotId)) return i.reply({content:'Format invalide. Exemple : Pseudo#TAG',ephemeral:true});
       store.setRiotId.run(i.user.id, riotId, Date.now());
       return i.reply({content:`Ton Riot ID est enregistré : **${riotId}**. Utilise \`/valorant\` pour l'afficher.`,ephemeral:true});
     }
@@ -150,29 +237,29 @@ async function handleCommand(i, client) {
         .setFooter({text:'Riot ID déclaré par le membre, non vérifié par Riot Games.'});
       return i.reply({embeds:[embed],ephemeral:false});
     }
-    case 'giveaway-create': {
+    case 'concours-creer': {
       const prize = i.options.getString('prix');
       const minutes = i.options.getInteger('minutes');
       const winners = i.options.getInteger('gagnants');
       const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(()=>null) : i.channel;
-      if (!channel?.isTextBased()) return i.reply({content:'Configure giveawayChannelId.',ephemeral:true});
+      if (!channel?.isTextBased()) return i.reply({content:'Configure le canal giveawayChannelId.',ephemeral:true});
       const endsAt = Date.now() + minutes*60000;
-      const embed = new EmbedBuilder().setColor(COLOR).setTitle('🎉 GIVEAWAY').setDescription(`**Lot :** ${prize}\n**Organisé par :** ${i.user}\n**Gagnants :** ${winners}\n**Fin :** <t:${Math.floor(endsAt/1000)}:R>\nClique sur Participer pour entrer.`).setTimestamp();
+      const embed = new EmbedBuilder().setColor(COLOR).setTitle('🎉 CONCOURS').setDescription(`**Lot :** ${prize}\n**Organisé par :** ${i.user}\n**Gagnants :** ${winners}\n**Fin :** <t:${Math.floor(endsAt/1000)}:R>\nClique sur Participer pour tenter ta chance.`).setTimestamp();
       const msg = await channel.send({embeds:[embed]});
       store.createGiveaway.run({message_id:msg.id,channel_id:channel.id,guild_id:guild.id,host_id:i.user.id,prize,winners,ends_at:endsAt});
       await msg.edit({components:[giveawayRow(msg.id)]});
-      return i.reply({content:`Giveaway créé : ${msg.url}`,ephemeral:true});
+      return i.reply({content:`Concours créé : ${msg.url}`,ephemeral:true});
     }
-    case 'giveaway-end': {
+    case 'concours-terminer': {
       const id = i.options.getString('message_id');
       const result = await finishGiveaway(client,id);
       if (!result.ok) return i.reply({content:result.message,ephemeral:true});
-      return i.reply({content:'Giveaway terminé.',ephemeral:true});
+      return i.reply({content:'Concours terminé.',ephemeral:true});
     }
-    case 'giveaway-reroll': {
+    case 'concours-relancer': {
       const id = i.options.getString('message_id');
       const g = store.getGiveaway.get(id);
-      if (!g || !g.ended) return i.reply({content:'Giveaway terminé introuvable.',ephemeral:true});
+      if (!g || !g.ended) return i.reply({content:'Concours terminé introuvable.',ephemeral:true});
       const pool = [...new Set(store.entries.all(id).map(x=>x.user_id))];
       const winners = [];
       while(pool.length && winners.length < g.winners) winners.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
@@ -181,22 +268,23 @@ async function handleCommand(i, client) {
       await ch?.send(`🔁 Nouveau tirage pour **${g.prize}** : ${winners.map(id=>`<@${id}>`).join(', ')}`);
       return i.reply({content:'Nouveau tirage effectué.',ephemeral:true});
     }
-    case 'ban-role':
-    case 'unban-role':
-    case 'mute-role':
-    case 'unmute-role': {
+    case 'role-bannir':
+    case 'role-debannir':
+    case 'role-muter':
+    case 'role-demuter': {
       const targetUser = i.options.getUser('membre');
       const member = await guild.members.fetch(targetUser.id).catch(()=>null);
       if (!member) return i.reply({content:'Membre introuvable.',ephemeral:true});
-      const roleId = i.commandName.includes('ban') ? cfg.bannedRoleId : cfg.mutedRoleId;
+      const isBanCommand = i.commandName === 'role-bannir' || i.commandName === 'role-debannir';
+      const roleId = isBanCommand ? cfg.bannedRoleId : cfg.mutedRoleId;
       const role = roleId ? await guild.roles.fetch(roleId).catch(()=>null) : null;
-      if (!role) return i.reply({content:`Configure le rôle ${i.commandName.includes('ban')?'BANNED':'MUTE'} dans config.json.`,ephemeral:true});
-      const remove = i.commandName.startsWith('un');
+      if (!role) return i.reply({content:`Configure le rôle ${isBanCommand?'BANNED':'MUTE'} dans config.json.`,ephemeral:true});
+      const remove = i.commandName === 'role-debannir' || i.commandName === 'role-demuter';
       await member.roles[remove?'remove':'add'](role, `Commande ${i.commandName} par ${i.user.tag}`);
       await log(guild, `🛡️ ${i.user.tag} a ${remove?'retiré':'attribué'} ${role.name} à ${targetUser.tag}.`);
       return i.reply({content:`Rôle **${role.name}** ${remove?'retiré de':'attribué à'} ${targetUser}.`,ephemeral:true});
     }
-    case 'kick': {
+    case 'expulser': {
       const user = i.options.getUser('membre');
       const member = await guild.members.fetch(user.id).catch(()=>null);
       if (!member?.kickable) return i.reply({content:'Ce membre ne peut pas être expulsé (hiérarchie ou permissions).',ephemeral:true});
@@ -204,7 +292,7 @@ async function handleCommand(i, client) {
       await log(guild, `👢 ${user.tag} expulsé par ${i.user.tag}.`);
       return i.reply({content:`${user.tag} a été expulsé.`,ephemeral:true});
     }
-    case 'clear': {
+    case 'nettoyer': {
       const amount = i.options.getInteger('nombre');
       if (!i.channel?.bulkDelete) return i.reply({content:'Salon incompatible.',ephemeral:true});
       const deleted = await i.channel.bulkDelete(amount,true);
@@ -214,23 +302,41 @@ async function handleCommand(i, client) {
 }
 
 async function handleButton(i, client) {
+  if (i.customId.startsWith('welcome:riot:')) {
+    const memberId = i.customId.split(':')[2];
+    if (i.user.id !== memberId) return i.reply({ content: 'Ce panneau est réservé au nouveau membre concerné.', ephemeral: true });
+    const modal = new ModalBuilder().setCustomId(`welcome:riot-modal:${memberId}`).setTitle('Enregistrer ton Riot ID');
+    const input = new TextInputBuilder().setCustomId('riot_id').setLabel('Riot ID (Pseudo#TAG)')
+      .setPlaceholder('Exemple : Joueur#EUW').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(49);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return i.showModal(modal);
+  }
+  if (i.customId.startsWith('welcome:accept:')) {
+    const memberId = i.customId.split(':')[2];
+    if (i.user.id !== memberId) return i.reply({ content: 'Ce panneau est réservé au nouveau membre concerné.', ephemeral: true });
+    if (!store.getRiotId.get(memberId)) return i.reply({ content: 'Enregistre d’abord ton Riot ID avec le bouton prévu, puis accepte le règlement.', ephemeral: true });
+    const member = await i.guild.members.fetch(memberId);
+    const memberRoleId = cfg.memberRoleId || cfg.welcomeRoleId;
+    if (!memberRoleId) return i.reply({ content: 'Le rôle membre n’est pas configuré. Contacte le staff.', ephemeral: true });
+    const role = await i.guild.roles.fetch(memberRoleId).catch(() => null);
+    if (!role) return i.reply({ content: 'Le rôle membre configuré est introuvable. Contacte le staff.', ephemeral: true });
+    await member.roles.add(role, 'Règlement accepté et Riot ID enregistré');
+    if (cfg.pendingRoleId) {
+      const pendingRole = await i.guild.roles.fetch(cfg.pendingRoleId).catch(() => null);
+      if (pendingRole) await member.roles.remove(pendingRole, 'Règlement accepté');
+    }
+    return i.update({ content: `${member} a enregistré son Riot ID et accepté le règlement.`, embeds: [], components: [] });
+  }
+  if (i.customId === 'announcement:create') {
+    if (!announcementStaffAllowed(i)) return i.reply({ content: 'Cette action est réservée au staff.', ephemeral: true });
+    const modal = new ModalBuilder().setCustomId('announcement:create-modal').setTitle('Rédiger une annonce');
+    const title = new TextInputBuilder().setCustomId('title').setLabel('Titre').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200);
+    const content = new TextInputBuilder().setCustomId('content').setLabel('Message').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000);
+    modal.addComponents(new ActionRowBuilder().addComponents(title), new ActionRowBuilder().addComponents(content));
+    return i.showModal(modal);
+  }
   if (i.customId.startsWith('ticket:open')) {
-    const type = i.customId.split(':')[2] || 'support';
-    const details = ticketTypes[type] || ticketTypes.support;
-    const existing = i.guild.channels.cache.find(c=>c.type===ChannelType.GuildText && c.name===`ticket-${i.user.id}`);
-    if (existing) return i.reply({content:`Tu as déjà un ticket : ${existing}`,ephemeral:true});
-    const overwrites = [
-      {id:i.guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},
-      {id:i.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.AttachFiles]},
-      {id:client.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ManageChannels]}
-    ];
-    if (cfg.ticketStaffRoleId) overwrites.push({id:cfg.ticketStaffRoleId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
-    const channel = await i.guild.channels.create({name:`ticket-${i.user.id}`,type:ChannelType.GuildText,parent:cfg.ticketCategoryId || undefined,permissionOverwrites:overwrites,topic:`Ticket ouvert par ${i.user.tag} (${i.user.id}) | Type: ${details.label}`});
-    const embed = new EmbedBuilder().setColor(COLOR).setTitle(`${details.emoji} ${details.label}`)
-      .setDescription(`Bonjour ${i.user}, décris ta demande en détail. Le staff pourra prendre en charge ce ticket, ajouter un membre ou joindre une transcription.`)
-      .setFooter({ text: `Ouvert par ${i.user.tag}` }).setTimestamp();
-    await channel.send({content:cfg.ticketStaffRoleId?`<@&${cfg.ticketStaffRoleId}>`:'',embeds:[embed],components:ticketControls()});
-    return i.reply({content:`Ton ticket est créé : ${channel}`,ephemeral:true});
+    return openTicket(i, client, i.customId.split(':')[2] || 'support');
   }
   if (i.customId === 'ticket:close') {
     return requestTicketClose(i);
@@ -268,23 +374,46 @@ async function handleButton(i, client) {
   if (i.customId === 'ticket:transcript') {
     if (!isTicketChannel(i.channel)) return i.reply({ content: 'Ce salon n’est pas un ticket.', ephemeral: true });
     if (!isTicketMember(i)) return i.reply({ content: 'Seul l’auteur du ticket ou le staff peut consulter la transcription.', ephemeral: true });
+    await i.deferReply({ ephemeral: true });
     const messages = await i.channel.messages.fetch({ limit: 100 });
     const transcript = [...messages.values()].reverse().map(message => {
       const content = message.content || '';
       const attachments = [...message.attachments.values()].map(file => file.url).join(' ');
       return `[${message.createdAt.toISOString()}] ${message.author.tag}: ${content}${attachments ? ` ${attachments}` : ''}`;
     }).join('\n');
-    return i.reply({ content: 'Transcription des 100 derniers messages :', files: [{ attachment: Buffer.from(transcript || 'Aucun message.'), name: `${i.channel.name}-transcription.txt` }], ephemeral: true });
+    try {
+      const ticketOwner = await i.client.users.fetch(ticketOwnerId(i.channel));
+      await ticketOwner.send({ content: `Transcription du ticket **${i.channel.name}** (100 derniers messages) :`, files: [{ attachment: Buffer.from(transcript || 'Aucun message.'), name: `${i.channel.name}-transcription.txt` }] });
+      return i.editReply(`La transcription vient d’être envoyée en MP à <@${ticketOwner.id}>.`);
+    } catch {
+      return i.editReply('Je ne peux pas t’envoyer de MP. Autorise les messages privés du serveur puis réessaie.');
+    }
   }
   if (i.customId.startsWith('giveaway:join:')) {
     const id = i.customId.split(':')[2];
     const g = store.getGiveaway.get(id);
-    if (!g || g.ended || g.ends_at <= Date.now()) return i.reply({content:'Ce giveaway est terminé.',ephemeral:true});
-    store.addEntry.run(id,i.user.id);
-    return i.reply({content:'Participation enregistrée ! Bonne chance 🍀',ephemeral:true});
+    if (!g || g.ended || g.ends_at <= Date.now()) return i.reply({content:'Ce concours est terminé.',ephemeral:true});
+    const result = store.addEntry.run(id, i.user.id, id, Date.now());
+    if (result.changes) return i.reply({content:'Participation enregistrée ! Bonne chance 🍀',ephemeral:true});
+    const current = store.getGiveaway.get(id);
+    return i.reply({content:!current || current.ended || current.ends_at <= Date.now() ? 'Ce concours est terminé.' : 'Tu participes déjà à ce concours.',ephemeral:true});
   }
 }
 async function handleModal(i) {
+  const onboardingMatch = i.customId.match(/^welcome:riot-modal:(\d+)$/);
+  if (onboardingMatch) {
+    if (i.user.id !== onboardingMatch[1]) return i.reply({ content: 'Ce formulaire est réservé au nouveau membre concerné.', ephemeral: true });
+    const riotId = i.fields.getTextInputValue('riot_id').trim();
+    if (!isValidRiotId(riotId)) return i.reply({ content: 'Format invalide. Exemple : Pseudo#TAG', ephemeral: true });
+    store.setRiotId.run(i.user.id, riotId, Date.now());
+    return i.reply({ content: `Riot ID enregistré : **${riotId}**. Tu peux maintenant accepter le règlement sur le panneau d’accueil.`, ephemeral: true });
+  }
+  if (i.customId === 'announcement:create-modal') {
+    if (!announcementStaffAllowed(i)) return i.reply({ content: 'Cette action est réservée au staff.', ephemeral: true });
+    await i.deferReply({ ephemeral: true });
+    const message = await sendAnnouncement(i.guild, i.user, i.fields.getTextInputValue('title').trim(), i.fields.getTextInputValue('content').trim(), null);
+    return i.editReply(message ? `Annonce publiée dans ${message.channel}.` : 'Configure un salon d’annonces valide.');
+  }
   if (i.customId !== 'ticket:add-member-modal') return;
   if (!isTicketChannel(i.channel) || !isTicketMember(i)) return i.reply({ content: 'Tu ne peux pas ajouter de membre à ce ticket.', ephemeral: true });
   const input = i.fields.getTextInputValue('member').trim();
@@ -299,7 +428,8 @@ async function handleModal(i) {
   await i.channel.send(`${member} a été ajouté au ticket par ${i.user}.`);
   return i.reply({ content: `${member.user.tag} peut maintenant accéder au ticket.`, ephemeral: true });
 }
-async function handleSelect(i) {
+async function handleSelect(i, client) {
+  if (i.customId === 'ticket:create') return openTicket(i, client, i.values[0]);
   if (i.customId !== 'roles:select') return;
   const allowed = cfg.roleMenuOptions || [];
   const selected = new Set(i.values);
@@ -315,4 +445,4 @@ async function handleSelect(i) {
   }
   return i.reply({content:changes.length?`Choix mis à jour : ${changes.join(', ')}`:'Aucun changement.',ephemeral:true});
 }
-module.exports = { handleCommand, handleButton, handleSelect, handleModal, finishGiveaway };
+module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, finishGiveaway, onboardingRow };

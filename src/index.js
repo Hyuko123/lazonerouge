@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('node:fs');
 const { Client, GatewayIntentBits, Events, EmbedBuilder } = require('discord.js');
-const { handleCommand, handleButton, handleSelect, handleModal, finishGiveaway } = require('./handlers');
+const { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, finishGiveaway, onboardingRow } = require('./handlers');
 const store = require('./database');
 
 if (!process.env.DISCORD_TOKEN) {
@@ -17,6 +17,7 @@ try {
   console.error('Configuration invalide. Vérifie config.json ou la variable CONFIG_JSON.', error.message);
   process.exit(1);
 }
+configureHandlers(cfg);
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates] });
 
 client.once(Events.ClientReady, async c => {
@@ -33,12 +34,30 @@ client.once(Events.ClientReady, async c => {
 });
 
 client.on(Events.GuildMemberAdd, async member => {
-  if (cfg.welcomeRoleId) {
-    const role = await member.guild.roles.fetch(cfg.welcomeRoleId).catch(()=>null);
+  if (cfg.pendingRoleId) {
+    const pendingRole = await member.guild.roles.fetch(cfg.pendingRoleId).catch(() => null);
+    if (pendingRole) await member.roles.add(pendingRole).catch(console.error);
+  }
+  if (cfg.welcomeRoleId && !cfg.onboardingChannelId) {
+    const role = await member.guild.roles.fetch(cfg.welcomeRoleId).catch(() => null);
     if (role) await member.roles.add(role).catch(console.error);
   }
-  const channel = cfg.welcomeChannelId ? await member.guild.channels.fetch(cfg.welcomeChannelId).catch(()=>null) : null;
+  const channelId = cfg.onboardingChannelId || cfg.welcomeChannelId;
+  const channel = channelId ? await member.guild.channels.fetch(channelId).catch(() => null) : null;
   if (channel?.isTextBased()) {
+    if (cfg.onboardingChannelId) {
+      const rules = (cfg.rules || []).map((rule, index) => `**${index + 1}.** ${rule}`).join('\n\n').slice(0, 3500);
+      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`Bienvenue sur ${member.guild.name}`)
+        .setDescription([
+          `Bienvenue ${member} ! Avant d’accéder au serveur, enregistre ton Riot ID puis confirme avoir lu le règlement.`,
+          '', '**Règlement**', rules || 'Respecte les membres et les décisions du staff.',
+          '', '**Étape 1 :** enregistre ton Riot ID au format `Pseudo#TAG`.',
+          '**Étape 2 :** accepte le règlement pour recevoir le rôle membre.'
+        ].join('\n')).setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: 'Ton Riot ID est enregistré par ce serveur et peut être modifié plus tard avec /riot-id.' });
+      channel.send({ content: `${member}`, embeds: [embed], components: [onboardingRow(member.id)] }).catch(console.error);
+      return;
+    }
     const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Bienvenue !').setDescription(`Bienvenue ${member} sur **${member.guild.name}** !`).setThumbnail(member.user.displayAvatarURL({size:256})).setFooter({text:`Membre #${member.guild.memberCount}`});
     channel.send({embeds:[embed]}).catch(console.error);
   }
@@ -48,7 +67,7 @@ client.on(Events.InteractionCreate, async i => {
   try {
     if (i.isChatInputCommand()) await handleCommand(i, client);
     else if (i.isButton()) await handleButton(i, client);
-    else if (i.isStringSelectMenu()) await handleSelect(i);
+    else if (i.isStringSelectMenu()) await handleSelect(i, client);
     else if (i.isModalSubmit()) await handleModal(i);
   } catch (error) {
     console.error(error);

@@ -4,16 +4,17 @@ Bot communautaire en **Node.js 20+ / Discord.js 14**, avec une identité visuell
 
 ## Fonctionnalités
 
-- Tickets privés avec catégories, prise en charge staff, ajout de membre, transcription et fermeture confirmée.
+- Tickets privés avec menu de catégories, noms lisibles, prise en charge staff, ajout de membre, fermeture confirmée et transcription envoyée au propriétaire en MP.
+- Accueil des nouveaux membres avec enregistrement du Riot ID et acceptation du règlement avant attribution du rôle membre.
 - Rôle automatique et message de bienvenue.
 - Menu de choix de rôles.
 - Rôle `BANNED` (masquage des salons via les permissions à configurer).
 - Rôle `MUTE` et commandes de modération.
-- `/help` : récapitulatif des commandes.
-- `/riotid` et `/valorant` : Riot ID déclaré par le membre, avatar Discord et profil.
-- Giveaways enregistrés en SQLite, avec tirage à la fin.
+- `/aide` : récapitulatif des commandes.
+- `/riot-id` et `/valorant` : Riot ID déclaré par le membre, avatar Discord et profil.
+- Concours enregistrés en SQLite, avec inscriptions uniques et clôture atomique pour éviter les doubles tirages.
 - Publication du règlement préconfiguré.
-- Annonces staff.
+- Annonces publiées depuis un panneau staff et formatées automatiquement.
 - Logs simples de modération.
 
 > Le profil Valorant affiche le Riot ID que le membre a lui-même déclaré. Il ne vérifie pas l'identité auprès de Riot Games et ne récupère pas de statistiques.
@@ -32,11 +33,10 @@ Bot communautaire en **Node.js 20+ / Discord.js 14**, avec une identité visuell
 4. Installe et lance :
    ```bash
    npm install
-   npm run deploy
    npm start
    ```
 
-Pour un déploiement global des commandes, retire `GUILD_ID` du fichier `.env` ; les commandes globales peuvent prendre un certain temps à apparaître.
+Au démarrage, le bot enregistre automatiquement les commandes slash dans le serveur indiqué par `GUILD_ID`. Pour un déploiement global, retire `GUILD_ID` ; les commandes globales peuvent prendre un certain temps à apparaître. `npm run deploy` permet aussi de les publier manuellement.
 
 ## Déploiement cloud avec Render
 
@@ -48,9 +48,9 @@ Le dépôt contient `render.yaml` pour créer un **Background Worker**. C'est un
    - `DISCORD_TOKEN` : token secret du bot.
    - `CLIENT_ID` : ID de l'application Discord.
    - `GUILD_ID` : ID du serveur (utile pour déployer rapidement les commandes).
-   - `CONFIG_JSON` : contenu JSON complet de `config.json`, collé comme valeur de variable.
+    - `CONFIG_JSON` : contenu JSON complet de `config.json`, avec les IDs `onboardingChannelId`, `memberRoleId`, `pendingRoleId`, `announcementPanelChannelId` et `announcementStaffRoleId`.
 4. Lance le déploiement.
-5. Pour enregistrer les commandes, exécute `npm run deploy` une fois depuis un terminal local avec le même `.env`, ou ajoute une étape de déploiement de commandes à ton processus de publication.
+5. Le démarrage du worker enregistre automatiquement les commandes du serveur indiqué par `GUILD_ID`.
 
 **Stockage :** SQLite écrit dans `data/bot.sqlite`. Sur un service cloud sans disque persistant, la base peut être perdue lors d'un redéploiement. Pour garder les Riot ID et les giveaways entre déploiements, attache un disque persistant Render au chemin `/opt/render/project/src/data` (vérifie le chemin de travail du service) ou remplace SQLite par une base PostgreSQL persistante. Ne déploie pas en production avant d'avoir configuré le stockage persistant.
 
@@ -71,27 +71,34 @@ Crée un rôle `BANNED`, puis refuse-lui `View Channel` sur les catégories/salo
 Crée un rôle `MUTE` et configure les salons textuels pour refuser `Send Messages`, `Add Reactions` et les permissions d'envoi associées. Pour les salons vocaux, refuse `Speak` et `Connect`. Répète la configuration pour les catégories et salons futurs. Le bot attribue le rôle, mais ne peut pas corriger automatiquement toutes les permissions existantes.
 
 ### Tickets
-Configure `ticketCategoryId`, `ticketStaffRoleId` et `ticketPanelChannelId`. Le panneau propose l'aide, les signalements, les partenariats et les autres demandes. Dans chaque ticket, l'auteur et le staff peuvent ajouter un membre, demander une transcription des 100 derniers messages ou fermer le ticket ; seul le staff peut prendre en charge le ticket. Le membre, le bot et le rôle staff doivent avoir les accès nécessaires.
+Configure `ticketCategoryId`, `ticketStaffRoleId` et `ticketPanelChannelId`. Le panneau propose l'aide, les signalements, les partenariats et les autres demandes. Dans chaque ticket, l'auteur et le staff peuvent ajouter un membre, demander une transcription des 100 derniers messages (envoyée en MP au propriétaire) ou fermer le ticket ; seul le staff peut prendre en charge le ticket. Le membre, le bot et le rôle staff doivent avoir les accès nécessaires.
+
+### Accueil et règlement
+Configure `onboardingChannelId` pour publier le panneau d'arrivée. `memberRoleId` est le rôle donné après l'enregistrement du Riot ID et l'acceptation du règlement. `pendingRoleId` est facultatif et peut servir à limiter les accès avant validation. Configure les permissions des salons pour que le rôle en attente ne voie que l'accueil et que le rôle membre ait accès au serveur. Le rôle du bot doit être au-dessus de ces rôles. Le règlement vient de la liste `rules`.
+
+### Annonces
+Configure `announcementPanelChannelId` pour le panneau staff, `announcementChannelId` pour la destination des annonces et `announcementStaffRoleId` pour autoriser l’usage du bouton. La publication du panneau lui-même reste réservée aux membres ayant `ManageGuild`.
 
 ## Commandes
 
-- `/help`
-- `/ticket-panel`
-- `/ticket-close`
-- `/roles-panel`
-- `/rules`
-- `/announce`
-- `/riotid`
+- `/aide`
+- `/panneau-tickets`
+- `/fermer-ticket`
+- `/panneau-roles`
+- `/publier-reglement`
+- `/panneau-annonces`
+- `/annonce`
+- `/riot-id`
 - `/valorant`
-- `/giveaway-create`
-- `/giveaway-end`
-- `/giveaway-reroll`
-- `/ban-role`
-- `/unban-role`
-- `/mute-role`
-- `/unmute-role`
-- `/kick`
-- `/clear`
+- `/concours-creer`
+- `/concours-terminer`
+- `/concours-relancer`
+- `/role-bannir`
+- `/role-debannir`
+- `/role-muter`
+- `/role-demuter`
+- `/expulser`
+- `/nettoyer`
 
 ## GitHub et sécurité
 

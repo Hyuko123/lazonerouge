@@ -40,6 +40,10 @@ module.exports = {
   getGiveaway: db.prepare('SELECT * FROM giveaways WHERE message_id = ?'),
   activeGiveaways: db.prepare('SELECT * FROM giveaways WHERE ended = 0'),
   endGiveaway: db.prepare('UPDATE giveaways SET ended = 1 WHERE message_id = ?'),
-  addEntry: db.prepare('INSERT OR IGNORE INTO giveaway_entries(message_id, user_id) VALUES(?, ?)'),
+  claimGiveawayFinish: db.prepare('UPDATE giveaways SET ended = 1 WHERE message_id = ? AND ended = 0'),
+  addEntry: db.prepare(`INSERT OR IGNORE INTO giveaway_entries(message_id, user_id)
+    SELECT ?, ? WHERE EXISTS (
+      SELECT 1 FROM giveaways WHERE message_id = ? AND ended = 0 AND ends_at > ?
+    )`),
   entries: db.prepare('SELECT user_id FROM giveaway_entries WHERE message_id = ?')
 };
