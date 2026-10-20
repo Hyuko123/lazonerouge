@@ -5,6 +5,7 @@ const {
 } = require('discord.js');
 const store = require('./database');
 const { parseCrosshairCode, renderCrosshair } = require('./crosshair');
+const { makeGiveawayBanner } = require('./giveawayBanner');
 
 const COLOR = 0x5865F2;
 let cfg = {};
@@ -439,8 +440,17 @@ async function handleCommand(i, client) {
       const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({content:'Configure le canal giveawayChannelId.',ephemeral:true});
       const endsAt = Date.now() + duration.milliseconds;
-      const embed = new EmbedBuilder().setColor(COLOR).setTitle('🎉 CONCOURS').setDescription(`**Lot :** ${prize}\n**Organisé par :** ${i.user}\n**Gagnants :** ${winners}\n**Durée :** ${duration.label}\n**Fin :** <t:${Math.floor(endsAt/1000)}:R>\nClique sur Participer pour tenter ta chance.`).addFields({ name: 'Participants', value: '0', inline: true }).setTimestamp();
-      const msg = await channel.send({embeds:[embed]});
+      const fileName = `concours-${i.user.id}-${endsAt}.png`;
+      const embed = new EmbedBuilder().setColor(0xB7F34A).setTitle('🎉 CONCOURS COMMUNAUTAIRE')
+        .setDescription(`**${prize}**\n\nOrganisé par ${i.user}\nDurée : **${duration.label}** · Fin : <t:${Math.floor(endsAt/1000)}:R>`)
+        .addFields(
+          { name: 'Gagnants', value: `${winners}`, inline: true },
+          { name: 'Participants', value: '0', inline: true },
+          { name: 'Pour participer', value: 'Clique sur le bouton ci-dessous. Une seule participation par personne.' }
+        )
+        .setImage(`attachment://${fileName}`).setFooter({ text: 'Bonne chance à tous les participants !' }).setTimestamp();
+      const banner = makeGiveawayBanner({ prize, winners, duration: duration.label, endsAt });
+      const msg = await channel.send({ embeds: [embed], files: [{ attachment: banner, name: fileName }], allowedMentions: { parse: [] } });
       store.createGiveaway.run({message_id:msg.id,channel_id:channel.id,guild_id:guild.id,host_id:i.user.id,prize,winners,ends_at:endsAt});
       await msg.edit({components:[giveawayRow(msg.id)]});
       return i.reply({content:`Concours créé : ${msg.url}`,ephemeral:true});
@@ -590,7 +600,8 @@ async function handleButton(i, client) {
   if (i.customId.startsWith('giveaway:join:')) {
     const id = i.customId.split(':')[2];
     const g = store.getGiveaway.get(id);
-    if (!g || g.ended || g.ends_at <= Date.now()) return i.reply({content:'Ce concours est terminé.',ephemeral:true});
+    if (!g) return i.reply({ content: 'Ce concours n’est plus enregistré dans la base du bot. Contacte le staff pour qu’il le recrée.', ephemeral: true });
+    if (g.ended || g.ends_at <= Date.now()) return i.reply({content:'Ce concours est terminé.',ephemeral:true});
     const result = store.addEntry.run(id, i.user.id, id, Date.now());
     if (result.changes) {
       await i.deferReply({ ephemeral: true });

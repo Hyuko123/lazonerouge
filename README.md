@@ -56,6 +56,9 @@ Le dépôt contient `render.yaml` pour créer un **Background Worker**. C'est un
 
 **Stockage :** SQLite écrit dans `data/bot.sqlite`. Sur un service cloud sans disque persistant, la base peut être perdue lors d'un redéploiement. Pour garder les Riot ID et les giveaways entre déploiements, attache un disque persistant Render au chemin `/opt/render/project/src/data` (vérifie le chemin de travail du service) ou remplace SQLite par une base PostgreSQL persistante. Ne déploie pas en production avant d'avoir configuré le stockage persistant.
 
+### Railway
+Ajoute un **Volume** au service du bot et définis son point de montage, par exemple `/app/data`. Le bot détecte automatiquement `RAILWAY_VOLUME_MOUNT_PATH` et y crée `bot.sqlite`. Tu peux aussi définir `DATA_DIR` à la même valeur si nécessaire. Sauvegarde une éventuelle base temporaire avant d’attacher le volume : son contenu initial ne copie pas les données existantes. Avec SQLite, garde une seule réplique active du bot.
+
 ## Discord Developer Portal
 
 - Scopes OAuth2 : `bot` et `applications.commands`.
