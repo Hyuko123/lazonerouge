@@ -4,8 +4,6 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 const store = require('./database');
-const { parseCrosshairCode, renderCrosshair } = require('./crosshair');
-const { makeGiveawayBanner } = require('./giveawayBanner');
 
 const COLOR = 0x5865F2;
 let cfg = {};
@@ -52,8 +50,20 @@ async function sendAnnouncement(guild, author, title, content, fallbackChannel) 
     ? await guild.channels.fetch(cfg.announcementChannelId).catch(() => null)
     : fallbackChannel;
   if (!channel?.isTextBased()) return null;
-  const embed = new EmbedBuilder().setColor(0xD94343).setAuthor({ name: 'Annonce officielle' })
-    .setTitle(title).setDescription(content).setFooter({ text: `Publié par ${author.username} · ${guild.name}` })
+  const embed = new EmbedBuilder()
+    .setColor(0xD94343)
+    .setAuthor({ name: '📢 ANNONCE OFFICIELLE', iconURL: guild.iconURL({ size: 128 }) })
+    .setTitle(`✨ ${title}`)
+    .setDescription([
+      content,
+      '',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '',
+      `📝 **Publié par :** ${author}`,
+      `🏠 **Serveur :** ${guild.name}`
+    ].join('\n'))
+    .setThumbnail(guild.iconURL({ size: 256 }))
+    .setFooter({ text: `📅 ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`, iconURL: author.displayAvatarURL({ size: 128 }) })
     .setTimestamp();
   const message = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
   await log(guild, `📣 Annonce publiée par ${author.tag} dans ${channel}.`);
@@ -61,7 +71,7 @@ async function sendAnnouncement(guild, author, title, content, fallbackChannel) 
 }
 function announcementPanelRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('announcement:create').setLabel('Rédiger une annonce').setStyle(ButtonStyle.Primary).setEmoji('📣')
+    new ButtonBuilder().setCustomId('announcement:create').setLabel('✨ RÉDIGER UNE ANNONCE').setStyle(ButtonStyle.Primary)
   );
 }
 function onboardingRow(userId) {
@@ -257,7 +267,7 @@ async function openTicket(interaction, client, type) {
 }
 function giveawayRow(id) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`giveaway:join:${id}`).setLabel('Participer').setStyle(ButtonStyle.Success).setEmoji('🎉')
+    new ButtonBuilder().setCustomId(`giveaway:join:${id}`).setLabel('🎉 PARTICIPER AU CONCOURS').setStyle(ButtonStyle.Success)
   );
 }
 const giveawayCountUpdates = new Map();
@@ -271,8 +281,8 @@ function updateGiveawayParticipantCount(client, messageId) {
     const message = await channel.messages.fetch(messageId).catch(() => null);
     if (!message?.embeds[0]) return;
     const embed = EmbedBuilder.from(message.embeds[0]);
-    const fields = (embed.data.fields || []).filter(field => field.name !== 'Participants');
-    fields.push({ name: 'Participants', value: `${store.entryCount.get(messageId).total}`, inline: true });
+    const fields = (embed.data.fields || []).filter(field => field.name !== '👥 Participants');
+    fields.push({ name: '👥 Participants', value: `${store.entryCount.get(messageId).total}`, inline: true });
     await message.edit({ embeds: [embed.setFields(fields)] });
   });
   giveawayCountUpdates.set(messageId, current);
@@ -295,12 +305,23 @@ async function finishGiveaway(client, messageId, forceChannelId) {
     const original = await channel.messages.fetch(messageId).catch(() => null);
     if (original) {
       const embed = EmbedBuilder.from(original.embeds[0] || new EmbedBuilder().setTitle('Concours'))
-        .setColor(0x747F8D).setFooter({ text: 'Concours terminé' });
+        .setColor(0xFFD700)
+        .setTitle('🏆 CONCOURS TERMINÉ')
+        .setDescription([
+          `**Lot :** ${g.prize}`,
+          '',
+          winners.length
+            ? `🎉 **Gagnant${winners.length > 1 ? 's' : ''} :** ${winners.map(id => `<@${id}>`).join(', ')}`
+            : '❌ Aucune participation',
+          '',
+          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+        ].join('\n'))
+        .setFooter({ text: 'Le concours est maintenant terminé. Merci à tous les participants !' });
       await original.edit({ embeds: [embed], components: [] }).catch(() => {});
     }
     await channel.send(winners.length
-      ? `🎉 Concours terminé ! Lot : **${g.prize}** — gagnant(s) : ${winners.map(id => `<@${id}>`).join(', ')}`
-      : `Concours terminé pour **${g.prize}** : aucune participation.`).catch(() => {});
+      ? `🎉 **Félicitations !** Le concours pour **${g.prize}** est terminé.\n\n🏆 Gagnant${winners.length > 1 ? 's' : ''} : ${winners.map(id => `<@${id}>`).join(', ')}`
+      : `❌ Le concours pour **${g.prize}** est terminé sans participation.`).catch(() => {});
   }
   return { ok: true, winners };
 }
@@ -391,9 +412,28 @@ async function handleCommand(i, client) {
     case 'panneau-annonces': {
       const channel = cfg.announcementPanelChannelId ? await guild.channels.fetch(cfg.announcementPanelChannelId).catch(() => null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon valide pour le panneau staff des annonces.', ephemeral: true });
-      const embed = new EmbedBuilder().setColor(0xD94343).setTitle('📣 Centre des annonces')
-        .setDescription('Utilise le bouton ci-dessous pour rédiger une annonce destinée au serveur. Elle sera publiée dans le salon configuré, avec une mise en forme uniforme.')
-        .setFooter({ text: 'Réservé au staff' });
+      const embed = new EmbedBuilder()
+        .setColor(0xD94343)
+        .setAuthor({ name: '� CENTRE DES ANNONCES', iconURL: guild.iconURL({ size: 128 }) })
+        .setTitle('✨ Système d\'annonces officiel')
+        .setDescription([
+          'Utilise le bouton ci-dessous pour rédiger et publier une annonce officielle destinée à l\'ensemble du serveur.',
+          '',
+          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          '',
+          '📝 **Fonctionnalités :**',
+          '• Mise en forme uniforme et professionnelle',
+          '• Publication dans le salon d\'annonces configuré',
+          '• Horodatage automatique',
+          '• Attribution à l\'auteur',
+          '',
+          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          '',
+          '*Réservé au staff autorisé*'
+        ].join('\n'))
+        .setThumbnail(guild.iconURL({ size: 256 }))
+        .setFooter({ text: 'Clique sur le bouton pour rédiger une annonce', iconURL: i.user.displayAvatarURL({ size: 128 }) })
+        .setTimestamp();
       await channel.send({ embeds: [embed], components: [announcementPanelRow()] });
       return i.reply({ content: 'Panneau staff publié.', ephemeral: true });
     }
@@ -417,21 +457,6 @@ async function handleCommand(i, client) {
         .setFooter({text:'Riot ID déclaré par le membre, non vérifié par Riot Games.'});
       return i.reply({embeds:[embed],ephemeral:false});
     }
-    case 'crosshair': {
-      const code = i.options.getString('code').trim();
-      if (!parseCrosshairCode(code)) return i.reply({ content: 'Code invalide. Colle un code d’import VALORANT complet commençant par `0;P;`.', ephemeral: true });
-      const channel = cfg.crosshairChannelId ? await guild.channels.fetch(cfg.crosshairChannelId).catch(() => null) : null;
-      if (!channel?.isTextBased()) return i.reply({ content: 'Le salon crosshairChannelId est absent ou inaccessible.', ephemeral: true });
-      await i.deferReply({ ephemeral: true });
-      const fileName = `crosshair-${i.user.id}.png`;
-      const png = renderCrosshair(code);
-      const embed = new EmbedBuilder().setColor(0x35A675).setTitle(`Crosshair de ${i.user.username}`)
-        .setDescription('Aperçu visuel généré depuis le code. Le jeu reste la référence pour les options avancées et le rendu exact.')
-        .addFields({ name: 'Code VALORANT', value: `\`\`\`\n${code}\n\`\`\`` })
-        .setImage(`attachment://${fileName}`).setFooter({ text: 'Partagé par la communauté' }).setTimestamp();
-      const message = await channel.send({ embeds: [embed], files: [{ attachment: png, name: fileName }], allowedMentions: { parse: [] } });
-      return i.editReply(`Ton crosshair a été publié dans ${channel} : ${message.url}`);
-    }
     case 'concours-creer': {
       const prize = i.options.getString('prix');
       const duration = giveawayDuration(i.options.getInteger('duree'), i.options.getString('unite'));
@@ -440,17 +465,33 @@ async function handleCommand(i, client) {
       const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({content:'Configure le canal giveawayChannelId.',ephemeral:true});
       const endsAt = Date.now() + duration.milliseconds;
-      const fileName = `concours-${i.user.id}-${endsAt}.png`;
-      const embed = new EmbedBuilder().setColor(0xB7F34A).setTitle('🎉 CONCOURS COMMUNAUTAIRE')
-        .setDescription(`**${prize}**\n\nOrganisé par ${i.user}\nDurée : **${duration.label}** · Fin : <t:${Math.floor(endsAt/1000)}:R>`)
+      const embed = new EmbedBuilder()
+        .setColor(0xB7F34A)
+        .setAuthor({ name: '✨ CONCOURS EXCLUSIF', iconURL: i.user.displayAvatarURL({ size: 128 }) })
+        .setTitle(`🎁 ${prize}`)
+        .setDescription([
+          `**Organisé par** ${i.user}`,
+          '',
+          `⏱️ **Durée :** ${duration.label}`,
+          `📅 **Fin :** <t:${Math.floor(endsAt/1000)}:F> (<t:${Math.floor(endsAt/1000)}:R>)`,
+          '',
+          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          '',
+          `🏆 **${winners} Gagnant${winners > 1 ? 's' : ''}**`,
+          '',
+          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          '',
+          'Clique sur le bouton ci-dessous pour participer !\nUne seule participation par personne.'
+        ].join('\n'))
         .addFields(
-          { name: 'Gagnants', value: `${winners}`, inline: true },
-          { name: 'Participants', value: '0', inline: true },
-          { name: 'Pour participer', value: 'Clique sur le bouton ci-dessous. Une seule participation par personne.' }
+          { name: '👥 Participants', value: '0', inline: true },
+          { name: '🎯 Gagnants', value: `${winners}`, inline: true },
+          { name: '⏳ Temps restant', value: `<t:${Math.floor(endsAt/1000)}:R>`, inline: true }
         )
-        .setImage(`attachment://${fileName}`).setFooter({ text: 'Bonne chance à tous les participants !' }).setTimestamp();
-      const banner = makeGiveawayBanner({ prize, winners, duration: duration.label, endsAt });
-      const msg = await channel.send({ embeds: [embed], files: [{ attachment: banner, name: fileName }], allowedMentions: { parse: [] } });
+        .setThumbnail(guild.iconURL({ size: 256 }))
+        .setFooter({ text: 'Bonne chance à tous ! 🍀', iconURL: client.user.displayAvatarURL({ size: 128 }) })
+        .setTimestamp();
+      const msg = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
       store.createGiveaway.run({message_id:msg.id,channel_id:channel.id,guild_id:guild.id,host_id:i.user.id,prize,winners,ends_at:endsAt});
       await msg.edit({components:[giveawayRow(msg.id)]});
       return i.reply({content:`Concours créé : ${msg.url}`,ephemeral:true});
