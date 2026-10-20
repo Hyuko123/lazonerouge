@@ -92,6 +92,17 @@ function parseBanDuration(input) {
     label: `${amount} ${unitLabel}${amount > 1 ? 's' : ''}`
   };
 }
+function giveawayDuration(amount, unit) {
+  const units = {
+    minutes: { milliseconds: 60000, maximum: 10080, label: 'minute' },
+    heures: { milliseconds: 3600000, maximum: 168, label: 'heure' },
+    jours: { milliseconds: 86400000, maximum: 365, label: 'jour' },
+    semaines: { milliseconds: 604800000, maximum: 52, label: 'semaine' }
+  };
+  const details = units[unit];
+  if (!details || !Number.isInteger(amount) || amount < 1 || amount > details.maximum) return null;
+  return { milliseconds: amount * details.milliseconds, label: `${amount} ${details.label}${amount > 1 ? 's' : ''}` };
+}
 function banNotificationEmbed(guild, target, reason, duration, moderator) {
   const endDate = duration.expiresAt
     ? `<t:${Math.floor(duration.expiresAt / 1000)}:F> (<t:${Math.floor(duration.expiresAt / 1000)}:R>)`
@@ -386,12 +397,13 @@ async function handleCommand(i, client) {
     }
     case 'concours-creer': {
       const prize = i.options.getString('prix');
-      const minutes = i.options.getInteger('minutes');
+      const duration = giveawayDuration(i.options.getInteger('duree'), i.options.getString('unite'));
       const winners = i.options.getInteger('gagnants');
+      if (!duration) return i.reply({ content: 'Durée invalide : maximum 7 jours en minutes/heures, 365 jours ou 52 semaines.', ephemeral: true });
       const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({content:'Configure le canal giveawayChannelId.',ephemeral:true});
-      const endsAt = Date.now() + minutes*60000;
-      const embed = new EmbedBuilder().setColor(COLOR).setTitle('🎉 CONCOURS').setDescription(`**Lot :** ${prize}\n**Organisé par :** ${i.user}\n**Gagnants :** ${winners}\n**Fin :** <t:${Math.floor(endsAt/1000)}:R>\nClique sur Participer pour tenter ta chance.`).setTimestamp();
+      const endsAt = Date.now() + duration.milliseconds;
+      const embed = new EmbedBuilder().setColor(COLOR).setTitle('🎉 CONCOURS').setDescription(`**Lot :** ${prize}\n**Organisé par :** ${i.user}\n**Gagnants :** ${winners}\n**Durée :** ${duration.label}\n**Fin :** <t:${Math.floor(endsAt/1000)}:R>\nClique sur Participer pour tenter ta chance.`).setTimestamp();
       const msg = await channel.send({embeds:[embed]});
       store.createGiveaway.run({message_id:msg.id,channel_id:channel.id,guild_id:guild.id,host_id:i.user.id,prize,winners,ends_at:endsAt});
       await msg.edit({components:[giveawayRow(msg.id)]});
@@ -619,4 +631,4 @@ async function handleReaction(reaction, user, added) {
   if (added) await member.roles.add(role, 'Rôle attribué par réaction');
   else await member.roles.remove(role, 'Rôle retiré par réaction');
 }
-module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, processExpiredBans, parseBanDuration, onboardingRow };
+module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, processExpiredBans, parseBanDuration, giveawayDuration, onboardingRow };

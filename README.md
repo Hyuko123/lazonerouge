@@ -73,6 +73,9 @@ Crée un rôle `MUTE` et configure les salons textuels pour refuser `Send Messag
 ### Bannissements
 La commande `/ban` demande un joueur, une raison et une durée (`30m`, `12h`, `7j`, ou `permanent`). Un message privé récapitule la décision et l’échéance. Les durées temporaires sont enregistrées en SQLite et le débannissement est exécuté automatiquement, même après un redémarrage du bot. Le bot doit avoir `Ban Members`.
 
+### Concours
+`/concours-creer` accepte une durée en minutes, heures, jours ou semaines. La durée maximale est de 365 jours (52 semaines).
+
 ### Tickets
 Configure `ticketCategoryId`, `ticketStaffRoleId` et `ticketPanelChannelId`. Le panneau propose l'aide, les signalements, les partenariats et les autres demandes. Dans chaque ticket, l'auteur et le staff peuvent ajouter un membre, demander une transcription des 100 derniers messages (envoyée en MP au propriétaire) ou fermer le ticket ; seul le staff peut prendre en charge le ticket. Le membre, le bot et le rôle staff doivent avoir les accès nécessaires.
 
