@@ -13,6 +13,7 @@ Bot communautaire en **Node.js 20+ / Discord.js 14**, avec une identité visuell
 - Rôle `MUTE` et commandes de modération.
 - `/aide` : récapitulatif des commandes.
 - `/riot-id` et `/valorant` : Riot ID déclaré par le membre, avatar Discord et profil.
+- `/crosshair` : partage le code d’import VALORANT avec un aperçu PNG généré à partir de ses réglages.
 - Concours enregistrés en SQLite, avec inscriptions uniques et clôture atomique pour éviter les doubles tirages.
 - Publication du règlement préconfiguré.
 - Annonces publiées depuis un panneau staff et formatées automatiquement.
@@ -86,6 +87,9 @@ Configure `onboardingChannelId` pour publier le panneau d'arrivée. `memberRoleI
 
 ### Invitations
 Configure `inviteLogChannelId` pour choisir le salon public du journal. Si ce champ est vide, le bot utilise `welcomeChannelId`. Le journal comptabilise chaque membre une fois et indique le lien et son créateur lorsque le compteur permet de les identifier. Si plusieurs compteurs changent en même temps, si le lien est une vanity URL ou si le bot ne peut pas lire les invitations, l’invitant est marqué comme indéterminé plutôt que deviné.
+
+### Crosshairs
+Configure `crosshairChannelId` pour le salon où les membres peuvent publier leur viseur. `/crosshair` accepte un code d’import VALORANT, l’affiche pour pouvoir le copier et joint un aperçu PNG généré depuis les réglages reconnus. Cet aperçu reste indicatif pour les paramètres avancés.
 
 ### Annonces
 Configure `announcementPanelChannelId` pour le panneau staff, `announcementChannelId` pour la destination des annonces et `announcementStaffRoleId` pour autoriser l’usage du bouton. La publication du panneau lui-même reste réservée aux membres ayant `ManageGuild`.

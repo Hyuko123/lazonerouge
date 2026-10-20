@@ -4,6 +4,7 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 const store = require('./database');
+const { parseCrosshairCode, renderCrosshair } = require('./crosshair');
 
 const COLOR = 0x5865F2;
 let cfg = {};
@@ -414,6 +415,21 @@ async function handleCommand(i, client) {
         .addFields({name:'Membre Discord',value:`${user}`,inline:true},{name:'Riot ID',value:profile?.riot_id || 'Non renseigné',inline:true})
         .setFooter({text:'Riot ID déclaré par le membre, non vérifié par Riot Games.'});
       return i.reply({embeds:[embed],ephemeral:false});
+    }
+    case 'crosshair': {
+      const code = i.options.getString('code').trim();
+      if (!parseCrosshairCode(code)) return i.reply({ content: 'Code invalide. Colle un code d’import VALORANT complet commençant par `0;P;`.', ephemeral: true });
+      const channel = cfg.crosshairChannelId ? await guild.channels.fetch(cfg.crosshairChannelId).catch(() => null) : null;
+      if (!channel?.isTextBased()) return i.reply({ content: 'Le salon crosshairChannelId est absent ou inaccessible.', ephemeral: true });
+      await i.deferReply({ ephemeral: true });
+      const fileName = `crosshair-${i.user.id}.png`;
+      const png = renderCrosshair(code);
+      const embed = new EmbedBuilder().setColor(0x35A675).setTitle(`Crosshair de ${i.user.username}`)
+        .setDescription('Aperçu visuel généré depuis le code. Le jeu reste la référence pour les options avancées et le rendu exact.')
+        .addFields({ name: 'Code VALORANT', value: `\`\`\`\n${code}\n\`\`\`` })
+        .setImage(`attachment://${fileName}`).setFooter({ text: 'Partagé par la communauté' }).setTimestamp();
+      const message = await channel.send({ embeds: [embed], files: [{ attachment: png, name: fileName }], allowedMentions: { parse: [] } });
+      return i.editReply(`Ton crosshair a été publié dans ${channel} : ${message.url}`);
     }
     case 'concours-creer': {
       const prize = i.options.getString('prix');
