@@ -6,6 +6,7 @@ Bot communautaire en **Node.js 20+ / Discord.js 14**, avec une identité visuell
 
 - Tickets privés avec menu de catégories, noms lisibles, prise en charge staff, ajout de membre, fermeture confirmée et transcription envoyée au propriétaire en MP.
 - Accueil des nouveaux membres avec enregistrement du Riot ID et acceptation du règlement avant attribution du rôle membre.
+- Journal public des arrivées avec l’invitant, le lien utilisé et le total de membres invités.
 - Rôle automatique et message de bienvenue.
 - Panneau de rôles par réactions : une réaction ajoute le rôle associé, la retirer enlève le rôle.
 - Rôle `BANNED` (masquage des salons via les permissions à configurer).
@@ -58,6 +59,7 @@ Le dépôt contient `render.yaml` pour créer un **Background Worker**. C'est un
 
 - Scopes OAuth2 : `bot` et `applications.commands`.
 - Active **Server Members Intent** pour le rôle automatique et le message de bienvenue.
+- Accorde au bot **Manage Server** pour qu’il puisse lire les compteurs des invitations ; active également l’intent **Guild Invites** si le portail le propose.
 - Place le rôle du bot au-dessus des rôles qu'il doit attribuer ou retirer.
 - Accorde uniquement les permissions nécessaires : bannir des membres, gérer les rôles, gérer les salons, ajouter des réactions, envoyer des messages, intégrer des liens, lire l'historique, expulser si nécessaire.
 - Les commandes slash n'ont pas besoin de l'intent Message Content.
@@ -74,13 +76,16 @@ Crée un rôle `MUTE` et configure les salons textuels pour refuser `Send Messag
 La commande `/ban` demande un joueur, une raison et une durée (`30m`, `12h`, `7j`, ou `permanent`). Un message privé récapitule la décision et l’échéance. Les durées temporaires sont enregistrées en SQLite et le débannissement est exécuté automatiquement, même après un redémarrage du bot. Le bot doit avoir `Ban Members`.
 
 ### Concours
-`/concours-creer` accepte une durée en minutes, heures, jours ou semaines. La durée maximale est de 365 jours (52 semaines).
+`/concours-creer` accepte une durée en minutes, heures, jours ou semaines. La durée maximale est de 365 jours (52 semaines). Le nombre de participants est affiché sur le message du concours et mis à jour à chaque nouvelle inscription.
 
 ### Tickets
 Configure `ticketCategoryId`, `ticketStaffRoleId` et `ticketPanelChannelId`. Le panneau propose l'aide, les signalements, les partenariats et les autres demandes. Dans chaque ticket, l'auteur et le staff peuvent ajouter un membre, demander une transcription des 100 derniers messages (envoyée en MP au propriétaire) ou fermer le ticket ; seul le staff peut prendre en charge le ticket. Le membre, le bot et le rôle staff doivent avoir les accès nécessaires.
 
 ### Accueil et règlement
 Configure `onboardingChannelId` pour publier le panneau d'arrivée. `memberRoleId` est le rôle donné après l'enregistrement du Riot ID et l'acceptation du règlement. `pendingRoleId` est facultatif et peut servir à limiter les accès avant validation. Configure les permissions des salons pour que le rôle en attente ne voie que l'accueil et que le rôle membre ait accès au serveur. Le rôle du bot doit être au-dessus de ces rôles. Le règlement vient de la liste `rules`.
+
+### Invitations
+Configure `inviteLogChannelId` pour choisir le salon public du journal. Si ce champ est vide, le bot utilise `welcomeChannelId`. Le journal comptabilise chaque membre une fois et indique le lien et son créateur lorsque le compteur permet de les identifier. Si plusieurs compteurs changent en même temps, si le lien est une vanity URL ou si le bot ne peut pas lire les invitations, l’invitant est marqué comme indéterminé plutôt que deviné.
 
 ### Annonces
 Configure `announcementPanelChannelId` pour le panneau staff, `announcementChannelId` pour la destination des annonces et `announcementStaffRoleId` pour autoriser l’usage du bouton. La publication du panneau lui-même reste réservée aux membres ayant `ManageGuild`.

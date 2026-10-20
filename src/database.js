@@ -48,6 +48,14 @@ CREATE TABLE IF NOT EXISTS temporary_bans (
   expires_at INTEGER NOT NULL,
   PRIMARY KEY (guild_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS invite_joins (
+  guild_id TEXT NOT NULL,
+  member_id TEXT NOT NULL,
+  inviter_id TEXT,
+  invite_code TEXT,
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY (guild_id, member_id)
+);
 `);
 
 module.exports = {
@@ -66,6 +74,7 @@ module.exports = {
       SELECT 1 FROM giveaways WHERE message_id = ? AND ended = 0 AND ends_at > ?
     )`),
   entries: db.prepare('SELECT user_id FROM giveaway_entries WHERE message_id = ?'),
+  entryCount: db.prepare('SELECT COUNT(*) AS total FROM giveaway_entries WHERE message_id = ?'),
   saveRolePanel: db.prepare(`INSERT INTO role_panel_messages(guild_id, category, channel_id, message_id)
     VALUES(?, ?, ?, ?) ON CONFLICT(guild_id, category) DO UPDATE SET channel_id=excluded.channel_id, message_id=excluded.message_id`),
   getRolePanel: db.prepare('SELECT * FROM role_panel_messages WHERE message_id = ?'),
@@ -74,5 +83,8 @@ module.exports = {
     VALUES(?, ?, ?, ?, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET reason=excluded.reason, banned_by=excluded.banned_by, expires_at=excluded.expires_at`),
   getTemporaryBan: db.prepare('SELECT * FROM temporary_bans WHERE guild_id = ? AND user_id = ?'),
   expiredTemporaryBans: db.prepare('SELECT * FROM temporary_bans WHERE expires_at <= ?'),
-  deleteTemporaryBan: db.prepare('DELETE FROM temporary_bans WHERE guild_id = ? AND user_id = ?')
+  deleteTemporaryBan: db.prepare('DELETE FROM temporary_bans WHERE guild_id = ? AND user_id = ?'),
+  recordInviteJoin: db.prepare(`INSERT OR IGNORE INTO invite_joins(guild_id, member_id, inviter_id, invite_code, joined_at)
+    VALUES(?, ?, ?, ?, ?)`),
+  countInvitedMembers: db.prepare('SELECT COUNT(*) AS total FROM invite_joins WHERE guild_id = ? AND inviter_id = ?')
 };

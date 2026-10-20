@@ -258,6 +258,26 @@ function giveawayRow(id) {
     new ButtonBuilder().setCustomId(`giveaway:join:${id}`).setLabel('Participer').setStyle(ButtonStyle.Success).setEmoji('🎉')
   );
 }
+const giveawayCountUpdates = new Map();
+function updateGiveawayParticipantCount(client, messageId) {
+  const previous = giveawayCountUpdates.get(messageId) || Promise.resolve();
+  const current = previous.catch(() => {}).then(async () => {
+    const giveaway = store.getGiveaway.get(messageId);
+    if (!giveaway) return;
+    const channel = await client.channels.fetch(giveaway.channel_id).catch(() => null);
+    if (!channel?.isTextBased()) return;
+    const message = await channel.messages.fetch(messageId).catch(() => null);
+    if (!message?.embeds[0]) return;
+    const embed = EmbedBuilder.from(message.embeds[0]);
+    const fields = (embed.data.fields || []).filter(field => field.name !== 'Participants');
+    fields.push({ name: 'Participants', value: `${store.entryCount.get(messageId).total}`, inline: true });
+    await message.edit({ embeds: [embed.setFields(fields)] });
+  });
+  giveawayCountUpdates.set(messageId, current);
+  return current.finally(() => {
+    if (giveawayCountUpdates.get(messageId) === current) giveawayCountUpdates.delete(messageId);
+  });
+}
 async function finishGiveaway(client, messageId, forceChannelId) {
   const g = store.getGiveaway.get(messageId);
   if (!g || g.ended) return { ok: false, message: 'Concours introuvable ou déjà terminé.' };
@@ -403,7 +423,7 @@ async function handleCommand(i, client) {
       const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({content:'Configure le canal giveawayChannelId.',ephemeral:true});
       const endsAt = Date.now() + duration.milliseconds;
-      const embed = new EmbedBuilder().setColor(COLOR).setTitle('🎉 CONCOURS').setDescription(`**Lot :** ${prize}\n**Organisé par :** ${i.user}\n**Gagnants :** ${winners}\n**Durée :** ${duration.label}\n**Fin :** <t:${Math.floor(endsAt/1000)}:R>\nClique sur Participer pour tenter ta chance.`).setTimestamp();
+      const embed = new EmbedBuilder().setColor(COLOR).setTitle('🎉 CONCOURS').setDescription(`**Lot :** ${prize}\n**Organisé par :** ${i.user}\n**Gagnants :** ${winners}\n**Durée :** ${duration.label}\n**Fin :** <t:${Math.floor(endsAt/1000)}:R>\nClique sur Participer pour tenter ta chance.`).addFields({ name: 'Participants', value: '0', inline: true }).setTimestamp();
       const msg = await channel.send({embeds:[embed]});
       store.createGiveaway.run({message_id:msg.id,channel_id:channel.id,guild_id:guild.id,host_id:i.user.id,prize,winners,ends_at:endsAt});
       await msg.edit({components:[giveawayRow(msg.id)]});
@@ -556,7 +576,11 @@ async function handleButton(i, client) {
     const g = store.getGiveaway.get(id);
     if (!g || g.ended || g.ends_at <= Date.now()) return i.reply({content:'Ce concours est terminé.',ephemeral:true});
     const result = store.addEntry.run(id, i.user.id, id, Date.now());
-    if (result.changes) return i.reply({content:'Participation enregistrée ! Bonne chance 🍀',ephemeral:true});
+    if (result.changes) {
+      await i.deferReply({ ephemeral: true });
+      await updateGiveawayParticipantCount(client, id).catch(console.error);
+      return i.editReply('Participation enregistrée ! Bonne chance 🍀');
+    }
     const current = store.getGiveaway.get(id);
     return i.reply({content:!current || current.ended || current.ends_at <= Date.now() ? 'Ce concours est terminé.' : 'Tu participes déjà à ce concours.',ephemeral:true});
   }
@@ -631,4 +655,4 @@ async function handleReaction(reaction, user, added) {
   if (added) await member.roles.add(role, 'Rôle attribué par réaction');
   else await member.roles.remove(role, 'Rôle retiré par réaction');
 }
-module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, processExpiredBans, parseBanDuration, giveawayDuration, onboardingRow };
+module.exports = { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, processExpiredBans, parseBanDuration, giveawayDuration, updateGiveawayParticipantCount, onboardingRow };

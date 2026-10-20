@@ -1,5 +1,6 @@
 {
   "welcomeChannelId": "",
+  "inviteLogChannelId": "",
   "welcomeRoleId": "",
   "onboardingChannelId": "",
   "memberRoleId": "",
