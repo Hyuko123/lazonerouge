@@ -45,38 +45,37 @@ async function log(guild, message) {
   const channel = await guild.channels.fetch(cfg.logChannelId).catch(() => null);
   if (channel?.isTextBased()) channel.send({ content: message, allowedMentions: { parse: [] } }).catch(() => {});
 }
-async function sendAnnouncement(guild, author, title, content, fallbackChannel) {
+async function sendAnnouncement(guild, author, title, content, fallbackChannel, pingEveryone = false) {
   const channel = cfg.announcementChannelId
     ? await guild.channels.fetch(cfg.announcementChannelId).catch(() => null)
     : fallbackChannel;
   if (!channel?.isTextBased()) return null;
 
   const embed = new EmbedBuilder()
-    .setColor(0xFF2D55)
+    .setColor(0xED4245)
     .setAuthor({ 
-      name: '✨ OFFICIAL ANNOUNCEMENT',
+      name: '✨ Annonce Officielle',
       iconURL: guild.iconURL({ size: 256 }) 
     })
-    .setTitle(`📢 ${title}`)
-    .setDescription([
-      content,
-      '',
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '',
-      `👤 **Posted by** ${author}`,
-      `🏠 **Server** ${guild.name}`
-    ].join('\n'))
+    .setTitle(title)
+    .setDescription(content)
     .setThumbnail(guild.iconURL({ size: 512 }))
     .setImage(guild.bannerURL({ size: 1024 }) || null)
+    .addFields(
+      { name: '👤 Auteur', value: `${author}`, inline: true },
+      { name: '🏠 Serveur', value: guild.name, inline: true },
+      { name: '📅 Date', value: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }), inline: true }
+    )
     .setFooter({ 
-      text: `${new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} • ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
+      text: `Publié le ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
       iconURL: author.displayAvatarURL({ size: 128 }) 
     })
     .setTimestamp();
 
   const message = await channel.send({ 
+    content: pingEveryone ? '@everyone' : null,
     embeds: [embed], 
-    allowedMentions: { parse: [] } 
+    allowedMentions: pingEveryone ? { parse: ['everyone'] } : { parse: [] } 
   });
   await log(guild, `📣 Annonce publiée par ${author.tag} dans ${channel}.`);
   return message;
@@ -426,21 +425,17 @@ async function handleCommand(i, client) {
       const channel = cfg.announcementPanelChannelId ? await guild.channels.fetch(cfg.announcementPanelChannelId).catch(() => null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon valide pour le panneau staff des annonces.', ephemeral: true });
       const embed = new EmbedBuilder()
-        .setColor(0xFF2D55)
+        .setColor(0xED4245)
         .setAuthor({ 
-          name: 'ANNOUNCEMENT CENTER',
+          name: 'Centre des Annonces',
           iconURL: guild.iconURL({ size: 256 }) 
         })
-        .setTitle('📢 Gestion des Annonces Officielles')
-        .setDescription([
-          'Utilisez les boutons ci-dessous pour gérer les annonces du serveur.',
-          '',
-          '**Fonctionnalités :**',
-          '• Mise en forme professionnelle',
-          '• Horodatage précis',
-          '',
-          '*Réservé au staff uniquement*'
-        ].join('\n'))
+        .setTitle('📢 Gestion des Annonces')
+        .setDescription('Utilisez les boutons ci-dessous pour créer une annonce officielle.')
+        .addFields(
+          { name: '✨ Fonctionnalités', value: 'Mise en forme professionnelle\nHorodatage automatique\nThumbnail et bannière', inline: true },
+          { name: '⚠️ Règles', value: 'Réservé au staff\nVérifiez avant publication', inline: true }
+        )
         .setThumbnail(guild.iconURL({ size: 512 }))
         .setFooter({ 
           text: guild.name,
@@ -451,7 +446,8 @@ async function handleCommand(i, client) {
       return i.reply({ content: 'Panneau staff publié.', ephemeral: true });
     }
     case 'annonce': {
-      const message = await sendAnnouncement(guild, i.user, i.options.getString('titre'), i.options.getString('message'), i.channel);
+      const ping = i.options.getBoolean('ping') || false;
+      const message = await sendAnnouncement(guild, i.user, i.options.getString('titre'), i.options.getString('message'), i.channel, ping);
       if (!message) return i.reply({content:'Configure un salon d’annonces valide.',ephemeral:true});
       return i.reply({content:'Annonce publiée.',ephemeral:true});
     }
@@ -604,7 +600,8 @@ async function handleButton(i, client) {
     const modal = new ModalBuilder().setCustomId('announcement:create-modal').setTitle('Rédiger une annonce');
     const title = new TextInputBuilder().setCustomId('title').setLabel('Titre').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200);
     const content = new TextInputBuilder().setCustomId('content').setLabel('Message').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000);
-    modal.addComponents(new ActionRowBuilder().addComponents(title), new ActionRowBuilder().addComponents(content));
+    const ping = new TextInputBuilder().setCustomId('ping').setLabel('Ping @everyone ? (oui/non)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(3).setPlaceholder('oui ou non');
+    modal.addComponents(new ActionRowBuilder().addComponents(title), new ActionRowBuilder().addComponents(content), new ActionRowBuilder().addComponents(ping));
     return i.showModal(modal);
   }
   if (i.customId === 'announcement:help') {
@@ -705,7 +702,9 @@ async function handleModal(i) {
   if (i.customId === 'announcement:create-modal') {
     if (!announcementStaffAllowed(i)) return i.reply({ content: 'Cette action est réservée au staff.', ephemeral: true });
     await i.deferReply({ ephemeral: true });
-    const message = await sendAnnouncement(i.guild, i.user, i.fields.getTextInputValue('title').trim(), i.fields.getTextInputValue('content').trim(), null);
+    const pingValue = i.fields.getTextInputValue('ping')?.trim().toLowerCase();
+    const ping = pingValue === 'oui' || pingValue === 'yes' || pingValue === 'true';
+    const message = await sendAnnouncement(i.guild, i.user, i.fields.getTextInputValue('title').trim(), i.fields.getTextInputValue('content').trim(), null, ping);
     return i.editReply(message ? `Annonce publiée dans ${message.channel}.` : 'Configure un salon d’annonces valide.');
   }
   if (i.customId !== 'ticket:add-member-modal') return;
