@@ -1,6 +1,6 @@
 require('dotenv').config();
 const fs = require('node:fs');
-const { Client, GatewayIntentBits, Events, EmbedBuilder, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Events, EmbedBuilder, Partials, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { configureHandlers, handleCommand, handleButton, handleSelect, handleModal, handleReaction, finishGiveaway, processExpiredBans, onboardingRow } = require('./handlers');
 const store = require('./database');
 
@@ -24,6 +24,7 @@ const client = new Client({
 });
 const inviteSnapshots = new Map();
 const inviteJoinQueues = new Map();
+const tempVoiceChannels = new Map();
 
 async function cacheGuildInvites(guild) {
   const invites = await guild.invites.fetch();
@@ -189,6 +190,42 @@ client.on(Events.MessageReactionAdd, (reaction, user) => {
 });
 client.on(Events.MessageReactionRemove, (reaction, user) => {
   handleReaction(reaction, user, false).catch(console.error);
+});
+
+client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+  if (!cfg.voiceCategoryId || !cfg.voiceJoinChannelId) return;
+
+  const member = newState.member;
+  if (!member) return;
+
+  const oldChannel = oldState.channel;
+  const newChannel = newState.channel;
+
+  if (newChannel && newChannel.id === cfg.voiceJoinChannelId) {
+    const category = await newChannel.guild.channels.fetch(cfg.voiceCategoryId).catch(() => null);
+    if (!category) return;
+
+    const voiceChannel = await newChannel.guild.channels.create({
+      name: `Vocal de ${member.user.username}`,
+      type: ChannelType.GuildVoice,
+      parent: category,
+      permissionOverwrites: [
+        { id: newChannel.guild.roles.everyone.id, deny: [PermissionFlagsBits.Connect] },
+        { id: member.id, allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.Stream, PermissionFlagsBits.UseVAD, PermissionFlagsBits.PrioritySpeaker] }
+      ]
+    });
+
+    tempVoiceChannels.set(voiceChannel.id, member.id);
+    await member.voice.setChannel(voiceChannel).catch(console.error);
+  }
+
+  if (oldChannel && tempVoiceChannels.has(oldChannel.id)) {
+    const members = oldChannel.members.size;
+    if (members === 0) {
+      await oldChannel.delete().catch(console.error);
+      tempVoiceChannels.delete(oldChannel.id);
+    }
+  }
 });
 
 client.login(process.env.DISCORD_TOKEN);

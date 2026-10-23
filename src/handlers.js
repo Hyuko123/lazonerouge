@@ -5,6 +5,8 @@ const {
 } = require('discord.js');
 const store = require('./database');
 
+const tempVoiceChannels = new Map();
+
 const COLOR = 0x5865F2;
 let cfg = {};
 function configureHandlers(config) {
@@ -566,6 +568,41 @@ async function handleCommand(i, client) {
       }
       return i.editReply('Échec de l\'envoi du ghost ping.');
     }
+    case 'panneau-vocal': {
+      if (!cfg.voiceJoinChannelId || !cfg.voiceManagementRoleId) return i.reply({content:'Configure voiceJoinChannelId et voiceManagementRoleId dans config.json.',ephemeral:true});
+      const channel = i.channel;
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('🎤 Gestion des Vocaux Temporaires')
+        .setDescription([
+          'Rejoignez le salon vocal pour créer votre propre vocal temporaire.',
+          '',
+          '**Comment créer un vocal :**',
+          '1. Rejoignez le salon "Créer un vocal"',
+          '2. Un vocal sera créé automatiquement avec votre nom',
+          '3. Vous serez déplacé automatiquement',
+          '',
+          '**Gestion :**',
+          'Utilisez le menu ci-dessous pour gérer votre vocal.',
+          '',
+          '*Le vocal sera supprimé quand il sera vide.*'
+        ].join('\n'))
+        .setFooter({ text: 'Système de vocaux temporaires' });
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('voice:management')
+        .setPlaceholder('Gestion vocale')
+        .addOptions([
+          { label: '🔒 Verrouiller le vocal', value: 'lock', description: 'Empêcher les autres de rejoindre' },
+          { label: '🔓 Déverrouiller le vocal', value: 'unlock', description: 'Autoriser les autres à rejoindre' },
+          { label: '👤 Inviter un membre', value: 'invite', description: 'Donner l\'accès à un membre' },
+          { label: '🚫 Retirer un membre', value: 'remove', description: 'Retirer l\'accès à un membre' },
+          { label: '🏷️ Renommer le vocal', value: 'rename', description: 'Changer le nom du vocal' },
+          { label: '👥 Limiter le nombre', value: 'limit', description: 'Limite le nombre de personnes' },
+          { label: '♾️ Supprimer la limite', value: 'unlimit', description: 'Retire la limite de personnes' }
+        ]);
+      await channel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
+      return i.reply({ content: 'Panneau vocal publié.', ephemeral: true });
+    }
   }
 }
 
@@ -689,6 +726,48 @@ async function handleButton(i, client) {
     const current = store.getGiveaway.get(id);
     return i.reply({content:!current || current.ended || current.ends_at <= Date.now() ? 'Ce concours est terminé.' : 'Tu participes déjà à ce concours.',ephemeral:true});
   }
+  if (i.customId === 'voice:management') {
+    const action = i.values[0];
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire pour utiliser cette commande.', ephemeral: true });
+
+    if (action === 'lock') {
+      await voiceChannel.permissionOverwrites.edit(i.guild.roles.everyone.id, { Connect: false });
+      return i.reply({ content: 'Vocal verrouillé.', ephemeral: true });
+    }
+    if (action === 'unlock') {
+      await voiceChannel.permissionOverwrites.edit(i.guild.roles.everyone.id, { Connect: null });
+      return i.reply({ content: 'Vocal déverrouillé.', ephemeral: true });
+    }
+    if (action === 'invite') {
+      const modal = new ModalBuilder().setCustomId('voice:invite-modal').setTitle('Inviter un membre');
+      const input = new TextInputBuilder().setCustomId('member').setLabel('Mention ou ID du membre').setStyle(TextInputStyle.Short).setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return i.showModal(modal);
+    }
+    if (action === 'remove') {
+      const modal = new ModalBuilder().setCustomId('voice:remove-modal').setTitle('Retirer un membre');
+      const input = new TextInputBuilder().setCustomId('member').setLabel('Mention ou ID du membre').setStyle(TextInputStyle.Short).setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return i.showModal(modal);
+    }
+    if (action === 'rename') {
+      const modal = new ModalBuilder().setCustomId('voice:rename-modal').setTitle('Renommer le vocal');
+      const input = new TextInputBuilder().setCustomId('name').setLabel('Nouveau nom').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100);
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return i.showModal(modal);
+    }
+    if (action === 'limit') {
+      const modal = new ModalBuilder().setCustomId('voice:limit-modal').setTitle('Limiter le vocal');
+      const input = new TextInputBuilder().setCustomId('limit').setLabel('Nombre maximum').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2);
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return i.showModal(modal);
+    }
+    if (action === 'unlimit') {
+      await voiceChannel.setUserLimit(null);
+      return i.reply({ content: 'Limite supprimée.', ephemeral: true });
+    }
+  }
 }
 async function handleModal(i) {
   const onboardingMatch = i.customId.match(/^welcome:riot-modal:(\d+)$/);
@@ -706,6 +785,45 @@ async function handleModal(i) {
     const ping = pingValue === 'oui' || pingValue === 'yes' || pingValue === 'true';
     const message = await sendAnnouncement(i.guild, i.user, i.fields.getTextInputValue('title').trim(), i.fields.getTextInputValue('content').trim(), null, ping);
     return i.editReply(message ? `Annonce publiée dans ${message.channel}.` : 'Configure un salon d’annonces valide.');
+  }
+  if (i.customId === 'voice:invite-modal') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    const input = i.fields.getTextInputValue('member').trim();
+    const match = input.match(/^(?:<@!?(\d+)>|(\d+))$/);
+    const userId = match?.[1] || match?.[2];
+    if (!userId) return i.reply({ content: 'Entre une mention valide ou un ID.', ephemeral: true });
+    await voiceChannel.permissionOverwrites.edit(userId, { Connect: true, Speak: true });
+    return i.reply({ content: 'Membre invité.', ephemeral: true });
+  }
+  if (i.customId === 'voice:remove-modal') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    const input = i.fields.getTextInputValue('member').trim();
+    const match = input.match(/^(?:<@!?(\d+)>|(\d+))$/);
+    const userId = match?.[1] || match?.[2];
+    if (!userId) return i.reply({ content: 'Entre une mention valide ou un ID.', ephemeral: true });
+    await voiceChannel.permissionOverwrites.edit(userId, { Connect: false });
+    const member = await i.guild.members.fetch(userId).catch(() => null);
+    if (member && member.voice.channel?.id === voiceChannel.id) {
+      await member.voice.disconnect().catch(console.error);
+    }
+    return i.reply({ content: 'Membre retiré.', ephemeral: true });
+  }
+  if (i.customId === 'voice:rename-modal') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    const name = i.fields.getTextInputValue('name').trim();
+    await voiceChannel.setName(name);
+    return i.reply({ content: 'Vocal renommé.', ephemeral: true });
+  }
+  if (i.customId === 'voice:limit-modal') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    const limit = parseInt(i.fields.getTextInputValue('limit'));
+    if (isNaN(limit) || limit < 1) return i.reply({ content: 'Entre un nombre valide.', ephemeral: true });
+    await voiceChannel.setUserLimit(limit);
+    return i.reply({ content: `Limite fixée à ${limit}.`, ephemeral: true });
   }
   if (i.customId !== 'ticket:add-member-modal') return;
   if (!isTicketChannel(i.channel) || !isTicketMember(i)) return i.reply({ content: 'Tu ne peux pas ajouter de membre à ce ticket.', ephemeral: true });

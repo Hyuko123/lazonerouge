@@ -25,7 +25,8 @@ const commands = [
   new SlashCommandBuilder().setName('role-demuter').setDescription('Retire le rôle MUTE').addUserOption(option => option.setName('membre').setDescription('Membre').setRequired(true)).setDefaultMemberPermissions(manageRoles),
   new SlashCommandBuilder().setName('expulser').setDescription('Expulse un membre').addUserOption(option => option.setName('membre').setDescription('Membre').setRequired(true)).addStringOption(option => option.setName('raison').setDescription('Raison').setRequired(false).setMaxLength(500)).setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
   new SlashCommandBuilder().setName('nettoyer').setDescription('Supprime des messages récents').addIntegerOption(option => option.setName('nombre').setDescription('Nombre (1 à 100)').setRequired(true).setMinValue(1).setMaxValue(100)).setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
-  new SlashCommandBuilder().setName('ghost-ping').setDescription('Envoie un ghost ping manuel').setDefaultMemberPermissions(manageGuild)
+  new SlashCommandBuilder().setName('ghost-ping').setDescription('Envoie un ghost ping manuel').setDefaultMemberPermissions(manageGuild),
+  new SlashCommandBuilder().setName('panneau-vocal').setDescription('Publie le panneau de gestion vocale').setDefaultMemberPermissions(manageGuild)
 ].map(command => command.toJSON());
 
 module.exports = commands;
