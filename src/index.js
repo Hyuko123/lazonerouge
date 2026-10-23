@@ -114,7 +114,10 @@ client.once(Events.ClientReady, async c => {
       for (const guild of client.guilds.cache.values()) {
         const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(() => null) : null;
         if (channel?.isTextBased() && cfg.memberRoleId) {
-          await channel.send({ content: `<@&${cfg.memberRoleId}>`, allowedMentions: { roles: [cfg.memberRoleId] } }).catch(console.error);
+          const message = await channel.send({ content: `<@&${cfg.memberRoleId}>`, allowedMentions: { roles: [cfg.memberRoleId] } }).catch(console.error);
+          if (message) {
+            setTimeout(() => message.delete().catch(console.error), 5000);
+          }
         }
       }
     }
