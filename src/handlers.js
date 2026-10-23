@@ -583,24 +583,23 @@ async function handleCommand(i, client) {
           '3. Vous serez déplacé automatiquement',
           '',
           '**Gestion :**',
-          'Utilisez le menu ci-dessous pour gérer votre vocal.',
+          'Utilisez les boutons ci-dessous pour gérer votre vocal.',
           '',
           '*Le vocal sera supprimé quand il sera vide.*'
         ].join('\n'))
         .setFooter({ text: 'Système de vocaux temporaires' });
-      const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('voice:management')
-        .setPlaceholder('Gestion vocale')
-        .addOptions([
-          { label: '🔒 Verrouiller le vocal', value: 'lock', description: 'Empêcher les autres de rejoindre' },
-          { label: '🔓 Déverrouiller le vocal', value: 'unlock', description: 'Autoriser les autres à rejoindre' },
-          { label: '👤 Inviter un membre', value: 'invite', description: 'Donner l\'accès à un membre' },
-          { label: '🚫 Retirer un membre', value: 'remove', description: 'Retirer l\'accès à un membre' },
-          { label: '🏷️ Renommer le vocal', value: 'rename', description: 'Changer le nom du vocal' },
-          { label: '👥 Limiter le nombre', value: 'limit', description: 'Limite le nombre de personnes' },
-          { label: '♾️ Supprimer la limite', value: 'unlimit', description: 'Retire la limite de personnes' }
-        ]);
-      await channel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
+      const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('voice:lock').setLabel('🔒 Verrouiller').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('voice:unlock').setLabel('🔓 Déverrouiller').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('voice:invite').setLabel('👤 Inviter').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('voice:remove').setLabel('🚫 Retirer').setStyle(ButtonStyle.Danger)
+      );
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('voice:rename').setLabel('🏷️ Renommer').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('voice:limit').setLabel('👥 Limiter').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('voice:unlimit').setLabel('♾️ Sans limite').setStyle(ButtonStyle.Secondary)
+      );
+      await channel.send({ embeds: [embed], components: [row1, row2] });
       return i.reply({ content: 'Panneau vocal publié.', ephemeral: true });
     }
   }
@@ -726,53 +725,55 @@ async function handleButton(i, client) {
     const current = store.getGiveaway.get(id);
     return i.reply({content:!current || current.ended || current.ends_at <= Date.now() ? 'Ce concours est terminé.' : 'Tu participes déjà à ce concours.',ephemeral:true});
   }
-  if (i.customId === 'voice:management') {
-    const action = i.values[0];
+  if (i.customId === 'voice:lock') {
     const voiceChannel = i.member.voice.channel;
-
-    if (action === 'lock') {
-      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
-      await voiceChannel.permissionOverwrites.edit(i.guild.roles.everyone.id, { Connect: false });
-      return i.reply({ content: 'Vocal verrouillé.', ephemeral: true });
-    }
-    if (action === 'unlock') {
-      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
-      await voiceChannel.permissionOverwrites.edit(i.guild.roles.everyone.id, { Connect: null });
-      return i.reply({ content: 'Vocal déverrouillé.', ephemeral: true });
-    }
-    if (action === 'invite') {
-      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
-      const modal = new ModalBuilder().setCustomId('voice:invite-modal').setTitle('Inviter un membre');
-      const input = new TextInputBuilder().setCustomId('member').setLabel('Mention ou ID du membre').setStyle(TextInputStyle.Short).setRequired(true);
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return i.showModal(modal);
-    }
-    if (action === 'remove') {
-      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
-      const modal = new ModalBuilder().setCustomId('voice:remove-modal').setTitle('Retirer un membre');
-      const input = new TextInputBuilder().setCustomId('member').setLabel('Mention ou ID du membre').setStyle(TextInputStyle.Short).setRequired(true);
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return i.showModal(modal);
-    }
-    if (action === 'rename') {
-      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
-      const modal = new ModalBuilder().setCustomId('voice:rename-modal').setTitle('Renommer le vocal');
-      const input = new TextInputBuilder().setCustomId('name').setLabel('Nouveau nom').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100);
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return i.showModal(modal);
-    }
-    if (action === 'limit') {
-      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
-      const modal = new ModalBuilder().setCustomId('voice:limit-modal').setTitle('Limiter le vocal');
-      const input = new TextInputBuilder().setCustomId('limit').setLabel('Nombre maximum').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2);
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return i.showModal(modal);
-    }
-    if (action === 'unlimit') {
-      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
-      await voiceChannel.setUserLimit(null);
-      return i.reply({ content: 'Limite supprimée.', ephemeral: true });
-    }
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    await voiceChannel.permissionOverwrites.edit(i.guild.roles.everyone.id, { Connect: false });
+    return i.reply({ content: 'Vocal verrouillé.', ephemeral: true });
+  }
+  if (i.customId === 'voice:unlock') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    await voiceChannel.permissionOverwrites.edit(i.guild.roles.everyone.id, { Connect: null });
+    return i.reply({ content: 'Vocal déverrouillé.', ephemeral: true });
+  }
+  if (i.customId === 'voice:invite') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    const modal = new ModalBuilder().setCustomId('voice:invite-modal').setTitle('Inviter un membre');
+    const input = new TextInputBuilder().setCustomId('member').setLabel('Mention ou ID du membre').setStyle(TextInputStyle.Short).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return i.showModal(modal);
+  }
+  if (i.customId === 'voice:remove') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    const modal = new ModalBuilder().setCustomId('voice:remove-modal').setTitle('Retirer un membre');
+    const input = new TextInputBuilder().setCustomId('member').setLabel('Mention ou ID du membre').setStyle(TextInputStyle.Short).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return i.showModal(modal);
+  }
+  if (i.customId === 'voice:rename') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    const modal = new ModalBuilder().setCustomId('voice:rename-modal').setTitle('Renommer le vocal');
+    const input = new TextInputBuilder().setCustomId('name').setLabel('Nouveau nom').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return i.showModal(modal);
+  }
+  if (i.customId === 'voice:limit') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    const modal = new ModalBuilder().setCustomId('voice:limit-modal').setTitle('Limiter le vocal');
+    const input = new TextInputBuilder().setCustomId('limit').setLabel('Nombre maximum').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return i.showModal(modal);
+  }
+  if (i.customId === 'voice:unlimit') {
+    const voiceChannel = i.member.voice.channel;
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
+    await voiceChannel.setUserLimit(null);
+    return i.reply({ content: 'Limite supprimée.', ephemeral: true });
   }
 }
 async function handleModal(i) {
