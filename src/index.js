@@ -107,6 +107,18 @@ client.once(Events.ClientReady, async c => {
     }
   }, 15000);
   setInterval(() => processExpiredBans(client).catch(console.error), 60000);
+
+  setInterval(async () => {
+    const now = new Date();
+    if (now.getHours() === 12 && now.getMinutes() === 0 && now.getSeconds() === 0) {
+      for (const guild of client.guilds.cache.values()) {
+        const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(() => null) : null;
+        if (channel?.isTextBased() && cfg.memberRoleId) {
+          await channel.send({ content: `<@&${cfg.memberRoleId}>`, allowedMentions: { roles: [cfg.memberRoleId] } }).catch(console.error);
+        }
+      }
+    }
+  }, 1000);
 });
 
 client.on(Events.InviteCreate, invite => {
