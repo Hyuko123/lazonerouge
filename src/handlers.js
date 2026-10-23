@@ -75,9 +75,8 @@ async function sendAnnouncement(guild, author, title, content, fallbackChannel) 
     .setTimestamp();
 
   const message = await channel.send({ 
-    content: '@everyone',
     embeds: [embed], 
-    allowedMentions: { parse: ['everyone'] } 
+    allowedMentions: { parse: [] } 
   });
   await log(guild, `📣 Annonce publiée par ${author.tag} dans ${channel}.`);
   return message;
@@ -438,7 +437,6 @@ async function handleCommand(i, client) {
           '',
           '**Fonctionnalités :**',
           '• Mise en forme professionnelle',
-          '• Ping @everyone automatique',
           '• Horodatage précis',
           '',
           '*Réservé au staff uniquement*'
@@ -620,9 +618,7 @@ async function handleButton(i, client) {
         '**Formatage :**',
         'Utilisez **gras**, *italique*, `code` et les sauts de ligne.',
         '',
-        '**Maximum :** 4000 caractères',
-        '',
-        '*Le ping @everyone est automatique.*'
+        '**Maximum :** 4000 caractères'
       ].join('\n'))
       .setFooter({ text: i.guild.name })
       .setTimestamp();
