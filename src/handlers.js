@@ -729,45 +729,47 @@ async function handleButton(i, client) {
   if (i.customId === 'voice:management') {
     const action = i.values[0];
     const voiceChannel = i.member.voice.channel;
-    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire pour utiliser cette commande.', ephemeral: true });
 
     if (action === 'lock') {
+      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
       await voiceChannel.permissionOverwrites.edit(i.guild.roles.everyone.id, { Connect: false });
       return i.reply({ content: 'Vocal verrouillé.', ephemeral: true });
     }
     if (action === 'unlock') {
+      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
       await voiceChannel.permissionOverwrites.edit(i.guild.roles.everyone.id, { Connect: null });
       return i.reply({ content: 'Vocal déverrouillé.', ephemeral: true });
     }
     if (action === 'invite') {
-      await i.deferReply({ ephemeral: true });
+      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
       const modal = new ModalBuilder().setCustomId('voice:invite-modal').setTitle('Inviter un membre');
       const input = new TextInputBuilder().setCustomId('member').setLabel('Mention ou ID du membre').setStyle(TextInputStyle.Short).setRequired(true);
       modal.addComponents(new ActionRowBuilder().addComponents(input));
       return i.showModal(modal);
     }
     if (action === 'remove') {
-      await i.deferReply({ ephemeral: true });
+      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
       const modal = new ModalBuilder().setCustomId('voice:remove-modal').setTitle('Retirer un membre');
       const input = new TextInputBuilder().setCustomId('member').setLabel('Mention ou ID du membre').setStyle(TextInputStyle.Short).setRequired(true);
       modal.addComponents(new ActionRowBuilder().addComponents(input));
       return i.showModal(modal);
     }
     if (action === 'rename') {
-      await i.deferReply({ ephemeral: true });
+      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
       const modal = new ModalBuilder().setCustomId('voice:rename-modal').setTitle('Renommer le vocal');
       const input = new TextInputBuilder().setCustomId('name').setLabel('Nouveau nom').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100);
       modal.addComponents(new ActionRowBuilder().addComponents(input));
       return i.showModal(modal);
     }
     if (action === 'limit') {
-      await i.deferReply({ ephemeral: true });
+      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
       const modal = new ModalBuilder().setCustomId('voice:limit-modal').setTitle('Limiter le vocal');
       const input = new TextInputBuilder().setCustomId('limit').setLabel('Nombre maximum').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2);
       modal.addComponents(new ActionRowBuilder().addComponents(input));
       return i.showModal(modal);
     }
     if (action === 'unlimit') {
+      if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
       await voiceChannel.setUserLimit(null);
       return i.reply({ content: 'Limite supprimée.', ephemeral: true });
     }
@@ -792,42 +794,42 @@ async function handleModal(i) {
   }
   if (i.customId === 'voice:invite-modal') {
     const voiceChannel = i.member.voice.channel;
-    if (!voiceChannel) return i.editReply({ content: 'Tu dois être dans un vocal temporaire.' });
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
     const input = i.fields.getTextInputValue('member').trim();
     const match = input.match(/^(?:<@!?(\d+)>|(\d+))$/);
     const userId = match?.[1] || match?.[2];
-    if (!userId) return i.editReply({ content: 'Entre une mention valide ou un ID.' });
+    if (!userId) return i.reply({ content: 'Entre une mention valide ou un ID.', ephemeral: true });
     await voiceChannel.permissionOverwrites.edit(userId, { Connect: true, Speak: true });
-    return i.editReply({ content: 'Membre invité.' });
+    return i.reply({ content: 'Membre invité.', ephemeral: true });
   }
   if (i.customId === 'voice:remove-modal') {
     const voiceChannel = i.member.voice.channel;
-    if (!voiceChannel) return i.editReply({ content: 'Tu dois être dans un vocal temporaire.' });
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
     const input = i.fields.getTextInputValue('member').trim();
     const match = input.match(/^(?:<@!?(\d+)>|(\d+))$/);
     const userId = match?.[1] || match?.[2];
-    if (!userId) return i.editReply({ content: 'Entre une mention valide ou un ID.' });
+    if (!userId) return i.reply({ content: 'Entre une mention valide ou un ID.', ephemeral: true });
     await voiceChannel.permissionOverwrites.edit(userId, { Connect: false });
     const member = await i.guild.members.fetch(userId).catch(() => null);
     if (member && member.voice.channel?.id === voiceChannel.id) {
       await member.voice.disconnect().catch(console.error);
     }
-    return i.editReply({ content: 'Membre retiré.' });
+    return i.reply({ content: 'Membre retiré.', ephemeral: true });
   }
   if (i.customId === 'voice:rename-modal') {
     const voiceChannel = i.member.voice.channel;
-    if (!voiceChannel) return i.editReply({ content: 'Tu dois être dans un vocal temporaire.' });
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
     const name = i.fields.getTextInputValue('name').trim();
     await voiceChannel.setName(name);
-    return i.editReply({ content: 'Vocal renommé.' });
+    return i.reply({ content: 'Vocal renommé.', ephemeral: true });
   }
   if (i.customId === 'voice:limit-modal') {
     const voiceChannel = i.member.voice.channel;
-    if (!voiceChannel) return i.editReply({ content: 'Tu dois être dans un vocal temporaire.' });
+    if (!voiceChannel) return i.reply({ content: 'Tu dois être dans un vocal temporaire.', ephemeral: true });
     const limit = parseInt(i.fields.getTextInputValue('limit'));
-    if (isNaN(limit) || limit < 1) return i.editReply({ content: 'Entre un nombre valide.' });
+    if (isNaN(limit) || limit < 1) return i.reply({ content: 'Entre un nombre valide.', ephemeral: true });
     await voiceChannel.setUserLimit(limit);
-    return i.editReply({ content: `Limite fixée à ${limit}.` });
+    return i.reply({ content: `Limite fixée à ${limit}.`, ephemeral: true });
   }
   if (i.customId !== 'ticket:add-member-modal') return;
   if (!isTicketChannel(i.channel) || !isTicketMember(i)) return i.reply({ content: 'Tu ne peux pas ajouter de membre à ce ticket.', ephemeral: true });
