@@ -146,6 +146,13 @@
       "value": "notif_annonces",
       "category": "notifications",
       "roleId": "1561830567870341121"
+    },
+    {
+      "label": "Notif Live",
+      "emoji": "📺",
+      "value": "notif_live",
+      "category": "notifications",
+      "roleId": "1563178385717330041"
     }
   ],
   "rules": [
