@@ -114,9 +114,14 @@ client.once(Events.ClientReady, async c => {
       for (const guild of client.guilds.cache.values()) {
         const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(() => null) : null;
         if (channel?.isTextBased() && cfg.memberRoleId) {
+          console.log(`[${now.toISOString()}] Envoi du ghost ping automatique dans ${channel.name}`);
           const message = await channel.send({ content: `<@&${cfg.memberRoleId}>`, allowedMentions: { roles: [cfg.memberRoleId] } }).catch(console.error);
           if (message) {
-            setTimeout(() => message.delete().catch(console.error), 5000);
+            console.log(`[${now.toISOString()}] Ghost ping envoyé, suppression dans 5 secondes`);
+            setTimeout(() => {
+              message.delete().catch(err => console.error('Erreur suppression ghost ping:', err));
+              console.log(`[${new Date().toISOString()}] Ghost ping supprimé`);
+            }, 5000);
           }
         }
       }

@@ -547,6 +547,16 @@ async function handleCommand(i, client) {
       const deleted = await i.channel.bulkDelete(amount,true);
       return i.reply({content:`${deleted.size} message(s) supprimé(s).`,ephemeral:true});
     }
+    case 'ghost-ping': {
+      if (!cfg.memberRoleId) return i.reply({content:'Configure memberRoleId dans config.json.',ephemeral:true});
+      await i.deferReply({ephemeral:true});
+      const message = await i.channel.send({content:`<@&${cfg.memberRoleId}>`,allowedMentions:{roles:[cfg.memberRoleId]}}).catch(console.error);
+      if (message) {
+        setTimeout(() => message.delete().catch(console.error), 5000);
+        return i.editReply('Ghost ping envoyé et supprimé après 5 secondes.');
+      }
+      return i.editReply('Échec de l\'envoi du ghost ping.');
+    }
   }
 }
 
