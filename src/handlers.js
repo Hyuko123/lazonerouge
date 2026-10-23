@@ -50,28 +50,52 @@ async function sendAnnouncement(guild, author, title, content, fallbackChannel) 
     ? await guild.channels.fetch(cfg.announcementChannelId).catch(() => null)
     : fallbackChannel;
   if (!channel?.isTextBased()) return null;
+
   const embed = new EmbedBuilder()
-    .setColor(0xD94343)
-    .setAuthor({ name: '📢 ANNONCE OFFICIELLE', iconURL: guild.iconURL({ size: 128 }) })
-    .setTitle(`✨ ${title}`)
+    .setColor(0xFF6B6B)
+    .setAuthor({ 
+      name: '══════════════════════════════════════',
+      iconURL: guild.iconURL({ size: 256 }) 
+    })
+    .setTitle('📢 𝐀𝐍𝐍𝐎𝐍𝐂𝐄 𝐎𝐅𝐅𝐈𝐂𝐈𝐄𝐋𝐋𝐄')
     .setDescription([
+      '══════════════════════════════════════',
+      '',
+      `**${title}**`,
+      '',
+      '══════════════════════════════════════',
+      '',
       content,
       '',
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '══════════════════════════════════════',
       '',
-      `📝 **Publié par :** ${author}`,
-      `🏠 **Serveur :** ${guild.name}`
+      `� **Publié par** ${author}`,
+      `🏠 **Serveur** ${guild.name}`,
+      `📅 **Date** ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
+      `⏰ **Heure** ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
+      '',
+      '══════════════════════════════════════'
     ].join('\n'))
-    .setThumbnail(guild.iconURL({ size: 256 }))
-    .setFooter({ text: `📅 ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`, iconURL: author.displayAvatarURL({ size: 128 }) })
+    .setThumbnail(guild.iconURL({ size: 512 }))
+    .setImage(guild.bannerURL({ size: 1024 }) || null)
+    .setFooter({ 
+      text: 'Merci de votre attention ! • ' + guild.name,
+      iconURL: author.displayAvatarURL({ size: 128 }) 
+    })
     .setTimestamp();
-  const message = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+
+  const message = await channel.send({ 
+    content: '@everyone 📢',
+    embeds: [embed], 
+    allowedMentions: { parse: ['everyone'] } 
+  });
   await log(guild, `📣 Annonce publiée par ${author.tag} dans ${channel}.`);
   return message;
 }
 function announcementPanelRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('announcement:create').setLabel('✨ RÉDIGER UNE ANNONCE').setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId('announcement:create').setLabel('📝 Rédiger une annonce').setStyle(ButtonStyle.Primary).setEmoji('✍️'),
+    new ButtonBuilder().setCustomId('announcement:help').setLabel('❓ Aide').setStyle(ButtonStyle.Secondary).setEmoji('📚')
   );
 }
 function onboardingRow(userId) {
@@ -413,26 +437,44 @@ async function handleCommand(i, client) {
       const channel = cfg.announcementPanelChannelId ? await guild.channels.fetch(cfg.announcementPanelChannelId).catch(() => null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon valide pour le panneau staff des annonces.', ephemeral: true });
       const embed = new EmbedBuilder()
-        .setColor(0xD94343)
-        .setAuthor({ name: '� CENTRE DES ANNONCES', iconURL: guild.iconURL({ size: 128 }) })
-        .setTitle('✨ Système d\'annonces officiel')
+        .setColor(0xFF6B6B)
+        .setAuthor({ 
+          name: '══════════════════════════════════════',
+          iconURL: guild.iconURL({ size: 256 }) 
+        })
+        .setTitle('📢 𝐂𝐄𝐍𝐓𝐑𝐄 𝐃𝐄𝐒 𝐀𝐍𝐍𝐎𝐍𝐂𝐄𝐒')
         .setDescription([
-          'Utilise le bouton ci-dessous pour rédiger et publier une annonce officielle destinée à l\'ensemble du serveur.',
+          '══════════════════════════════════════',
           '',
-          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          'Bienvenue dans le centre de gestion des annonces officielles du serveur.',
           '',
-          '📝 **Fonctionnalités :**',
-          '• Mise en forme uniforme et professionnelle',
-          '• Publication dans le salon d\'annonces configuré',
-          '• Horodatage automatique',
+          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          '',
+          '**📝 Créer une annonce**',
+          'Utilise le bouton ci-dessous pour rédiger et publier une annonce officielle.',
+          '',
+          '**✨ Fonctionnalités incluses :**',
+          '• Mise en forme professionnelle et uniforme',
+          '• Ping @everyone automatique',
+          '• Horodatage précis',
           '• Attribution à l\'auteur',
+          '• Thumbnail et bannière du serveur',
           '',
-          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          '**⚠️ Règles :**',
+          '• Réservé au staff autorisé uniquement',
+          '• Vérifiez bien le contenu avant publication',
+          '• Le ping @everyone est automatique',
           '',
-          '*Réservé au staff autorisé*'
+          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          '',
+          '*Cliquez sur le bouton pour commencer*'
         ].join('\n'))
-        .setThumbnail(guild.iconURL({ size: 256 }))
-        .setFooter({ text: 'Clique sur le bouton pour rédiger une annonce', iconURL: i.user.displayAvatarURL({ size: 128 }) })
+        .setThumbnail(guild.iconURL({ size: 512 }))
+        .setImage(guild.bannerURL({ size: 1024 }) || null)
+        .setFooter({ 
+          text: 'Système d\'annonces • ' + guild.name,
+          iconURL: i.user.displayAvatarURL({ size: 128 }) 
+        })
         .setTimestamp();
       await channel.send({ embeds: [embed], components: [announcementPanelRow()] });
       return i.reply({ content: 'Panneau staff publié.', ephemeral: true });
@@ -593,6 +635,38 @@ async function handleButton(i, client) {
     const content = new TextInputBuilder().setCustomId('content').setLabel('Message').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000);
     modal.addComponents(new ActionRowBuilder().addComponents(title), new ActionRowBuilder().addComponents(content));
     return i.showModal(modal);
+  }
+  if (i.customId === 'announcement:help') {
+    const embed = new EmbedBuilder()
+      .setColor(0xFF6B6B)
+      .setTitle('❓ Aide - Système d\'annonces')
+      .setDescription([
+        '══════════════════════════════════════',
+        '',
+        '**Comment utiliser le système d\'annonces ?**',
+        '',
+        '1️⃣ **Créer une annonce**',
+        '   • Cliquez sur "📝 Rédiger une annonce"',
+        '   • Remplissez le titre et le contenu',
+        '   • L\'annonce sera publiée automatiquement',
+        '',
+        '2️⃣ **Formatage**',
+        '   • Utilisez **gras**, *italique*, `code`',
+        '   • Les sauts de ligne sont conservés',
+        '   • Maximum 4000 caractères',
+        '',
+        '3️⃣ **Automatisme**',
+        '   • Ping @everyone automatique',
+        '   • Horodatage ajouté',
+        '   • Attribution à l\'auteur',
+        '',
+        '══════════════════════════════════════',
+        '',
+        '*Besoin d\'aide supplémentaire ? Contactez le staff.*'
+      ].join('\n'))
+      .setFooter({ text: 'Centre d\'aide • ' + i.guild.name })
+      .setTimestamp();
+    return i.reply({ embeds: [embed], ephemeral: true });
   }
   if (i.customId.startsWith('ticket:open')) {
     return openTicket(i, client, i.customId.split(':')[2] || 'support');
