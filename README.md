@@ -11,10 +11,10 @@ Bot communautaire en **Node.js 20+ / Discord.js 14**, avec une identité visuell
 - Panneau de rôles par réactions : une réaction ajoute le rôle associé, la retirer enlève le rôle.
 - Rôle `BANNED` (masquage des salons via les permissions à configurer).
 - Rôle `MUTE` et commandes de modération.
-- `/aide` : récapitulatif des commandes.
+- `/help` : récapitulatif des commandes (les noms des commandes slash sont en anglais).
 - `/riot-id` et `/valorant` : Riot ID déclaré par le membre, avatar Discord et profil.
 - `/crosshair` : partage le code d’import VALORANT avec un aperçu PNG généré à partir de ses réglages.
-- Concours enregistrés en SQLite, avec inscriptions uniques et clôture atomique pour éviter les doubles tirages.
+- Giveaways enregistrés en SQLite, avec une carte publique, inscriptions uniques, clôture atomique et conditions facultatives de rôle et d’ancienneté du compte.
 - Publication du règlement préconfiguré.
 - Annonces publiées depuis un panneau staff et formatées automatiquement.
 - Logs simples de modération.
@@ -80,7 +80,9 @@ Crée un rôle `MUTE` et configure les salons textuels pour refuser `Send Messag
 La commande `/ban` demande un joueur, une raison et une durée (`30m`, `12h`, `7j`, ou `permanent`). Un message privé récapitule la décision et l’échéance. Les durées temporaires sont enregistrées en SQLite et le débannissement est exécuté automatiquement, même après un redémarrage du bot. Le bot doit avoir `Ban Members`.
 
 ### Concours
-`/concours-creer` accepte une durée en minutes, heures, jours ou semaines. La durée maximale est de 365 jours (52 semaines). Le nombre de participants est affiché sur le message du concours et mis à jour à chaque nouvelle inscription.
+Les commandes staff sont `/giveaway-create`, `/giveaway-end` et `/giveaway-reroll`. `/giveaway-create` accepte un lot, un nombre de gagnants et une durée en minutes, heures, jours, semaines ou mois (un mois vaut 30 jours). Les limites sont 7 jours pour minutes/heures, 365 jours, 52 semaines ou 12 mois. Les conditions facultatives incluent un rôle Discord, le Server Tag de ce serveur équipé sur le profil, un boost actif de ce serveur et un âge minimum de compte en jours. Elles sont affichées sur la carte publique et vérifiées lors de l’inscription. Les participants sont comptés en direct.
+
+Les autres commandes utilisent aussi des noms anglais : `/clear`, `/kick`, `/ban`, `/ticket-panel`, etc. Après déploiement, les anciennes commandes françaises sont remplacées par les noms anglais.
 
 ### Tickets
 Configure `ticketCategoryId`, `ticketStaffRoleId` et `ticketPanelChannelId`. Le panneau propose l'aide, les signalements, les partenariats et les autres demandes. Dans chaque ticket, l'auteur et le staff peuvent ajouter un membre, demander une transcription des 100 derniers messages (envoyée en MP au propriétaire) ou fermer le ticket ; seul le staff peut prendre en charge le ticket. Le membre, le bot et le rôle staff doivent avoir les accès nécessaires.
@@ -96,12 +98,9 @@ Configure `crosshairChannelId` pour le salon où les membres peuvent publier leu
 
 ### Annonces
 Configure `announcementPanelChannelId` pour le panneau staff, `announcementChannelId` pour la destination des annonces et `announcementStaffRoleId` pour autoriser l’usage du bouton. La publication du panneau lui-même reste réservée aux membres ayant `ManageGuild`.
-- `/role-bannir`
-- `/role-debannir`
-- `/role-muter`
-- `/role-demuter`
-- `/expulser`
-- `/nettoyer`
+
+### Commandes slash
+Les noms disponibles après déploiement sont en anglais : `/help`, `/ticket-panel`, `/close-ticket`, `/rank-roles-panel`, `/profile-roles-panel`, `/notification-roles-panel`, `/publish-rules`, `/announcement-panel`, `/announcement`, `/riot-id`, `/valorant`, `/giveaway-create`, `/giveaway-end`, `/giveaway-reroll`, `/ban`, `/ban-role`, `/unban-role`, `/mute-role`, `/unmute-role`, `/kick`, `/clear`, `/ghost-ping` et `/voice-panel`.
 
 ## GitHub et sécurité
 

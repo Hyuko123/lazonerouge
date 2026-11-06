@@ -4,6 +4,7 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 const store = require('./database');
+const { giveawayDuration, giveawayEligibility } = require('./giveaway-utils');
 
 const tempVoiceChannels = new Map();
 
@@ -118,17 +119,6 @@ function parseBanDuration(input) {
     label: `${amount} ${unitLabel}${amount > 1 ? 's' : ''}`
   };
 }
-function giveawayDuration(amount, unit) {
-  const units = {
-    minutes: { milliseconds: 60000, maximum: 10080, label: 'minute' },
-    heures: { milliseconds: 3600000, maximum: 168, label: 'heure' },
-    jours: { milliseconds: 86400000, maximum: 365, label: 'jour' },
-    semaines: { milliseconds: 604800000, maximum: 52, label: 'semaine' }
-  };
-  const details = units[unit];
-  if (!details || !Number.isInteger(amount) || amount < 1 || amount > details.maximum) return null;
-  return { milliseconds: amount * details.milliseconds, label: `${amount} ${details.label}${amount > 1 ? 's' : ''}` };
-}
 function banNotificationEmbed(guild, target, reason, duration, moderator) {
   const endDate = duration.expiresAt
     ? `<t:${Math.floor(duration.expiresAt / 1000)}:F> (<t:${Math.floor(duration.expiresAt / 1000)}:R>)`
@@ -158,9 +148,9 @@ async function banMember(interaction) {
   if (!interaction.memberPermissions?.has(PermissionFlagsBits.BanMembers)) {
     return interaction.reply({ content: 'Tu n’as pas la permission de bannir des membres.', ephemeral: true });
   }
-  const target = interaction.options.getUser('joueur');
-  const reason = interaction.options.getString('raison').trim();
-  const duration = parseBanDuration(interaction.options.getString('duree'));
+  const target = interaction.options.getUser('target');
+  const reason = interaction.options.getString('reason').trim();
+  const duration = parseBanDuration(interaction.options.getString('duration'));
   if (!duration) return interaction.reply({ content: 'Durée invalide. Utilise par exemple `30m`, `12h`, `7j` ou `permanent` (maximum : 10 ans).', ephemeral: true });
   if (!reason) return interaction.reply({ content: 'La raison du bannissement ne peut pas être vide.', ephemeral: true });
   if (target.id === interaction.user.id) return interaction.reply({ content: 'Tu ne peux pas te bannir toi-même.', ephemeral: true });
@@ -281,8 +271,35 @@ async function openTicket(interaction, client, type) {
 }
 function giveawayRow(id) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`giveaway:join:${id}`).setLabel('🎉 PARTICIPER AU CONCOURS').setStyle(ButtonStyle.Success)
+    new ButtonBuilder().setCustomId(`giveaway:join:${id}`).setLabel('Participer au giveaway').setEmoji('🎉').setStyle(ButtonStyle.Success)
   );
+}
+function giveawayEmbed({ prize, host, winners, endsAt, participantCount, requiredRoleId, requireServerTag, requireServerBoost, minAccountAgeDays, guild, client, ended = false, winnerIds = [] }) {
+  const endingTimestamp = Math.floor(endsAt / 1000);
+  const requirements = [
+    requiredRoleId ? `Rôle requis : <@&${requiredRoleId}>` : 'Aucun rôle requis',
+    requireServerTag ? `Tag serveur requis : **${guild.name}**` : null,
+    requireServerBoost ? 'Booster actif de ce serveur requis 🚀' : null,
+    minAccountAgeDays > 0 ? `Compte Discord âgé d’au moins **${minAccountAgeDays} jours**` : null
+  ].filter(Boolean);
+
+  return new EmbedBuilder()
+    .setColor(ended ? 0xF1C40F : 0x7C4DFF)
+    .setAuthor({ name: ended ? 'GIVEAWAY TERMINÉ' : 'GIVEAWAY • À NE PAS MANQUER', iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle(`🎁 ${prize}`)
+    .setDescription(ended
+      ? winnerIds.length
+        ? `Félicitations ${winnerIds.map(id => `<@${id}>`).join(', ')} !`
+        : 'Aucune participation valide n’a été enregistrée.'
+      : 'Clique sur **Participer au giveaway** pour tenter ta chance. Une seule participation par membre.')
+    .addFields(
+      { name: '🏆 Gagnants', value: `${winners}`, inline: true },
+      { name: '👥 Participants', value: `${participantCount}`, inline: true },
+      { name: '⏰ Se termine', value: ended ? 'Giveaway terminé' : `<t:${endingTimestamp}:R>\n<t:${endingTimestamp}:F>`, inline: true },
+      { name: '📋 Conditions de participation', value: requirements.join('\n') }
+    )
+    .setFooter({ text: `Organisé par ${host} • ${guild.name}`, iconURL: client.user.displayAvatarURL({ size: 64 }) })
+    .setTimestamp(ended ? new Date() : new Date(endsAt));
 }
 const giveawayCountUpdates = new Map();
 function updateGiveawayParticipantCount(client, messageId) {
@@ -294,10 +311,22 @@ function updateGiveawayParticipantCount(client, messageId) {
     if (!channel?.isTextBased()) return;
     const message = await channel.messages.fetch(messageId).catch(() => null);
     if (!message?.embeds[0]) return;
-    const embed = EmbedBuilder.from(message.embeds[0]);
-    const fields = (embed.data.fields || []).filter(field => field.name !== '👥 Participants');
-    fields.push({ name: '👥 Participants', value: `${store.entryCount.get(messageId).total}`, inline: true });
-    await message.edit({ embeds: [embed.setFields(fields)] });
+    await message.edit({
+      embeds: [giveawayEmbed({
+        prize: giveaway.prize,
+        host: `<@${giveaway.host_id}>`,
+        winners: giveaway.winners,
+        endsAt: giveaway.ends_at,
+        participantCount: store.entryCount.get(messageId).total,
+        requiredRoleId: giveaway.required_role_id,
+        requireServerTag: Boolean(giveaway.require_server_tag),
+        requireServerBoost: Boolean(giveaway.require_server_boost),
+        minAccountAgeDays: giveaway.min_account_age_days,
+        guild: message.guild,
+        client,
+        ended: Boolean(giveaway.ended)
+      })]
+    });
   });
   giveawayCountUpdates.set(messageId, current);
   return current.finally(() => {
@@ -318,24 +347,28 @@ async function finishGiveaway(client, messageId, forceChannelId) {
   if (channel?.isTextBased()) {
     const original = await channel.messages.fetch(messageId).catch(() => null);
     if (original) {
-      const embed = EmbedBuilder.from(original.embeds[0] || new EmbedBuilder().setTitle('Concours'))
-        .setColor(0xFFD700)
-        .setTitle('🏆 CONCOURS TERMINÉ')
-        .setDescription([
-          `**Lot :** ${g.prize}`,
-          '',
-          winners.length
-            ? `🎉 **Gagnant${winners.length > 1 ? 's' : ''} :** ${winners.map(id => `<@${id}>`).join(', ')}`
-            : '❌ Aucune participation',
-          '',
-          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-        ].join('\n'))
-        .setFooter({ text: 'Le concours est maintenant terminé. Merci à tous les participants !' });
-      await original.edit({ embeds: [embed], components: [] }).catch(() => {});
+      await original.edit({
+        embeds: [giveawayEmbed({
+          prize: g.prize,
+          host: `<@${g.host_id}>`,
+          winners: g.winners,
+          endsAt: g.ends_at,
+          participantCount: store.entryCount.get(messageId).total,
+          requiredRoleId: g.required_role_id,
+          requireServerTag: Boolean(g.require_server_tag),
+          requireServerBoost: Boolean(g.require_server_boost),
+          minAccountAgeDays: g.min_account_age_days,
+          guild: original.guild,
+          client,
+          ended: true,
+          winnerIds: winners
+        })],
+        components: []
+      }).catch(() => {});
     }
     await channel.send(winners.length
-      ? `🎉 **Félicitations !** Le concours pour **${g.prize}** est terminé.\n\n🏆 Gagnant${winners.length > 1 ? 's' : ''} : ${winners.map(id => `<@${id}>`).join(', ')}`
-      : `❌ Le concours pour **${g.prize}** est terminé sans participation.`).catch(() => {});
+      ? `🎉 **Félicitations !** Le giveaway pour **${g.prize}** est terminé.\n\n🏆 Gagnant${winners.length > 1 ? 's' : ''} : ${winners.map(id => `<@${id}>`).join(', ')}`
+      : `❌ Le giveaway pour **${g.prize}** est terminé sans participation.`).catch(() => {});
   }
   return { ok: true, winners };
 }
@@ -377,17 +410,17 @@ async function publishRolePanel(interaction, category) {
 async function handleCommand(i, client) {
   const guild = i.guild;
   switch (i.commandName) {
-    case 'aide': {
-      const embed = new EmbedBuilder().setColor(COLOR).setTitle('📚 Commandes du bot').setDescription([
-        '**Général**', '`/aide` `/riot-id` `/valorant`',
-        '**Tickets & rôles**', '`/panneau-tickets` `/fermer-ticket` `/panneau-roles-rang` `/panneau-roles-profil` `/panneau-roles-notifications`',
-        '**Modération**', '`/ban` `/role-bannir` `/role-debannir` `/role-muter` `/role-demuter` `/expulser` `/nettoyer`',
-        '**Communauté**', '`/publier-reglement` `/panneau-annonces` `/annonce`',
-        '**Concours**', '`/concours-creer` `/concours-terminer` `/concours-relancer`'
+    case 'help': {
+      const embed = new EmbedBuilder().setColor(COLOR).setTitle('📚 Bot commands').setDescription([
+        '**General**', '`/help` `/riot-id` `/valorant`',
+        '**Tickets & roles**', '`/ticket-panel` `/close-ticket` `/rank-roles-panel` `/profile-roles-panel` `/notification-roles-panel`',
+        '**Moderation**', '`/ban` `/ban-role` `/unban-role` `/mute-role` `/unmute-role` `/kick` `/clear`',
+        '**Community**', '`/publish-rules` `/announcement-panel` `/announcement`',
+        '**Giveaways**', '`/giveaway-create` `/giveaway-end` `/giveaway-reroll`'
       ].join('\n')).setFooter({ text: 'Les commandes de gestion nécessitent les permissions appropriées.' });
       return i.reply({ embeds: [embed], ephemeral: true });
     }
-    case 'panneau-tickets': {
+    case 'ticket-panel': {
       const channel = cfg.ticketPanelChannelId ? await guild.channels.fetch(cfg.ticketPanelChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon de tickets valide.', ephemeral: true });
       const panel = new EmbedBuilder().setColor(COLOR).setTitle('🎫 Centre d’assistance')
@@ -407,23 +440,23 @@ async function handleCommand(i, client) {
       await channel.send({ embeds: [panel], components: [ticketMenu()] });
       return i.reply({ content: 'Panneau de tickets publié.', ephemeral: true });
     }
-    case 'fermer-ticket': {
+    case 'close-ticket': {
       return requestTicketClose(i);
     }
-    case 'panneau-roles-rang':
+    case 'rank-roles-panel':
       return publishRolePanel(i, 'rang');
-    case 'panneau-roles-profil':
+    case 'profile-roles-panel':
       return publishRolePanel(i, 'profil');
-    case 'panneau-roles-notifications':
+    case 'notification-roles-panel':
       return publishRolePanel(i, 'notifications');
-    case 'publier-reglement': {
+    case 'publish-rules': {
       const channel = cfg.rulesChannelId ? await guild.channels.fetch(cfg.rulesChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({content:'Configure rulesChannelId.',ephemeral:true});
       const description = (cfg.rules || []).map((r,n)=>`**${n+1}.** ${r}`).join('\n\n').slice(0,4000);
       await channel.send({embeds:[new EmbedBuilder().setColor(COLOR).setTitle('📜 Règlement du serveur').setDescription(description)]});
       return i.reply({content:'Règlement publié.',ephemeral:true});
     }
-    case 'panneau-annonces': {
+    case 'announcement-panel': {
       const channel = cfg.announcementPanelChannelId ? await guild.channels.fetch(cfg.announcementPanelChannelId).catch(() => null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({ content: 'Configure un salon valide pour le panneau staff des annonces.', ephemeral: true });
       const embed = new EmbedBuilder()
@@ -447,9 +480,9 @@ async function handleCommand(i, client) {
       await channel.send({ embeds: [embed], components: [announcementPanelRow()] });
       return i.reply({ content: 'Panneau staff publié.', ephemeral: true });
     }
-    case 'annonce': {
-      const ping = i.options.getBoolean('ping') || false;
-      const message = await sendAnnouncement(guild, i.user, i.options.getString('titre'), i.options.getString('message'), i.channel, ping);
+    case 'announcement': {
+      const ping = i.options.getBoolean('mention_everyone') || false;
+      const message = await sendAnnouncement(guild, i.user, i.options.getString('title'), i.options.getString('message'), i.channel, ping);
       if (!message) return i.reply({content:'Configure un salon d’annonces valide.',ephemeral:true});
       return i.reply({content:'Annonce publiée.',ephemeral:true});
     }
@@ -460,7 +493,7 @@ async function handleCommand(i, client) {
       return i.reply({content:`Ton Riot ID est enregistré : **${riotId}**. Utilise \`/valorant\` pour l'afficher.`,ephemeral:true});
     }
     case 'valorant': {
-      const user = i.options.getUser('membre') || i.user;
+      const user = i.options.getUser('member') || i.user;
       const profile = store.getRiotId.get(user.id);
       const embed = new EmbedBuilder().setColor(COLOR).setTitle(`Profil Valorant — ${user.username}`)
         .setThumbnail(user.displayAvatarURL({size:256}))
@@ -468,52 +501,59 @@ async function handleCommand(i, client) {
         .setFooter({text:'Riot ID déclaré par le membre, non vérifié par Riot Games.'});
       return i.reply({embeds:[embed],ephemeral:false});
     }
-    case 'concours-creer': {
-      const prize = i.options.getString('prix');
-      const duration = giveawayDuration(i.options.getInteger('duree'), i.options.getString('unite'));
-      const winners = i.options.getInteger('gagnants');
-      if (!duration) return i.reply({ content: 'Durée invalide : maximum 7 jours en minutes/heures, 365 jours ou 52 semaines.', ephemeral: true });
+    case 'giveaway-create': {
+      const prize = i.options.getString('prize').trim();
+      const duration = giveawayDuration(i.options.getInteger('duration'), i.options.getString('duration_unit'));
+      const winners = i.options.getInteger('winners');
+      const requiredRole = i.options.getRole('required_role');
+      const requireServerTag = i.options.getBoolean('require_server_tag') || false;
+      const requireServerBoost = i.options.getBoolean('require_server_boost') || false;
+      const minAccountAgeDays = i.options.getInteger('min_account_age_days') || 0;
+      if (!duration) return i.reply({ content: 'Durée invalide : maximum 7 jours en minutes/heures, 365 jours, 52 semaines ou 12 mois.', ephemeral: true });
+      if (!prize) return i.reply({ content: 'Le lot ne peut pas être vide.', ephemeral: true });
+      if (requiredRole?.id === guild.id) {
+        return i.reply({ content: 'Le rôle @everyone ne peut pas être une condition de participation.', ephemeral: true });
+      }
       const channel = cfg.giveawayChannelId ? await guild.channels.fetch(cfg.giveawayChannelId).catch(()=>null) : i.channel;
       if (!channel?.isTextBased()) return i.reply({content:'Configure le canal giveawayChannelId.',ephemeral:true});
       const endsAt = Date.now() + duration.milliseconds;
-      const embed = new EmbedBuilder()
-        .setColor(0xB7F34A)
-        .setAuthor({ name: '✨ CONCOURS EXCLUSIF', iconURL: i.user.displayAvatarURL({ size: 128 }) })
-        .setTitle(`🎁 ${prize}`)
-        .setDescription([
-          `**Organisé par** ${i.user}`,
-          '',
-          `⏱️ **Durée :** ${duration.label}`,
-          `📅 **Fin :** <t:${Math.floor(endsAt/1000)}:F> (<t:${Math.floor(endsAt/1000)}:R>)`,
-          '',
-          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-          '',
-          `🏆 **${winners} Gagnant${winners > 1 ? 's' : ''}**`,
-          '',
-          '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-          '',
-          'Clique sur le bouton ci-dessous pour participer !\nUne seule participation par personne.'
-        ].join('\n'))
-        .addFields(
-          { name: '👥 Participants', value: '0', inline: true },
-          { name: '🎯 Gagnants', value: `${winners}`, inline: true },
-          { name: '⏳ Temps restant', value: `<t:${Math.floor(endsAt/1000)}:R>`, inline: true }
-        )
-        .setThumbnail(guild.iconURL({ size: 256 }))
-        .setFooter({ text: 'Bonne chance à tous ! 🍀', iconURL: client.user.displayAvatarURL({ size: 128 }) })
-        .setTimestamp();
+      const embed = giveawayEmbed({
+        prize,
+        host: i.user.toString(),
+        winners,
+        endsAt,
+        participantCount: 0,
+        requiredRoleId: requiredRole?.id || null,
+        requireServerTag,
+        requireServerBoost,
+        minAccountAgeDays,
+        guild,
+        client
+      });
       const msg = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
-      store.createGiveaway.run({message_id:msg.id,channel_id:channel.id,guild_id:guild.id,host_id:i.user.id,prize,winners,ends_at:endsAt});
+      store.createGiveaway.run({
+        message_id: msg.id,
+        channel_id: channel.id,
+        guild_id: guild.id,
+        host_id: i.user.id,
+        prize,
+        winners,
+        required_role_id: requiredRole?.id || null,
+        require_server_tag: requireServerTag ? 1 : 0,
+        require_server_boost: requireServerBoost ? 1 : 0,
+        min_account_age_days: minAccountAgeDays,
+        ends_at: endsAt
+      });
       await msg.edit({components:[giveawayRow(msg.id)]});
-      return i.reply({content:`Concours créé : ${msg.url}`,ephemeral:true});
+      return i.reply({content:`Giveaway créé : ${msg.url}`,ephemeral:true});
     }
-    case 'concours-terminer': {
+    case 'giveaway-end': {
       const id = i.options.getString('message_id');
       const result = await finishGiveaway(client,id);
       if (!result.ok) return i.reply({content:result.message,ephemeral:true});
-      return i.reply({content:'Concours terminé.',ephemeral:true});
+      return i.reply({content:'Giveaway terminé.',ephemeral:true});
     }
-    case 'concours-relancer': {
+    case 'giveaway-reroll': {
       const id = i.options.getString('message_id');
       const g = store.getGiveaway.get(id);
       if (!g || !g.ended) return i.reply({content:'Concours terminé introuvable.',ephemeral:true});
@@ -528,32 +568,32 @@ async function handleCommand(i, client) {
     case 'ban': {
       return banMember(i);
     }
-    case 'role-bannir':
-    case 'role-debannir':
-    case 'role-muter':
-    case 'role-demuter': {
-      const targetUser = i.options.getUser('membre');
+    case 'ban-role':
+    case 'unban-role':
+    case 'mute-role':
+    case 'unmute-role': {
+      const targetUser = i.options.getUser('member');
       const member = await guild.members.fetch(targetUser.id).catch(()=>null);
       if (!member) return i.reply({content:'Membre introuvable.',ephemeral:true});
-      const isBanCommand = i.commandName === 'role-bannir' || i.commandName === 'role-debannir';
+      const isBanCommand = i.commandName === 'ban-role' || i.commandName === 'unban-role';
       const roleId = isBanCommand ? cfg.bannedRoleId : cfg.mutedRoleId;
       const role = roleId ? await guild.roles.fetch(roleId).catch(()=>null) : null;
       if (!role) return i.reply({content:`Configure le rôle ${isBanCommand?'BANNED':'MUTE'} dans config.json.`,ephemeral:true});
-      const remove = i.commandName === 'role-debannir' || i.commandName === 'role-demuter';
+      const remove = i.commandName === 'unban-role' || i.commandName === 'unmute-role';
       await member.roles[remove?'remove':'add'](role, `Commande ${i.commandName} par ${i.user.tag}`);
       await log(guild, `🛡️ ${i.user.tag} a ${remove?'retiré':'attribué'} ${role.name} à ${targetUser.tag}.`);
       return i.reply({content:`Rôle **${role.name}** ${remove?'retiré de':'attribué à'} ${targetUser}.`,ephemeral:true});
     }
-    case 'expulser': {
-      const user = i.options.getUser('membre');
+    case 'kick': {
+      const user = i.options.getUser('member');
       const member = await guild.members.fetch(user.id).catch(()=>null);
       if (!member?.kickable) return i.reply({content:'Ce membre ne peut pas être expulsé (hiérarchie ou permissions).',ephemeral:true});
-      await member.kick(i.options.getString('raison') || `Par ${i.user.tag}`);
+      await member.kick(i.options.getString('reason') || `Par ${i.user.tag}`);
       await log(guild, `👢 ${user.tag} expulsé par ${i.user.tag}.`);
       return i.reply({content:`${user.tag} a été expulsé.`,ephemeral:true});
     }
-    case 'nettoyer': {
-      const amount = i.options.getInteger('nombre');
+    case 'clear': {
+      const amount = i.options.getInteger('amount');
       if (!i.channel?.bulkDelete) return i.reply({content:'Salon incompatible.',ephemeral:true});
       const deleted = await i.channel.bulkDelete(amount,true);
       return i.reply({content:`${deleted.size} message(s) supprimé(s).`,ephemeral:true});
@@ -568,7 +608,7 @@ async function handleCommand(i, client) {
       }
       return i.editReply('Échec de l\'envoi du ghost ping.');
     }
-    case 'panneau-vocal': {
+    case 'voice-panel': {
       if (!cfg.voiceJoinChannelId || !cfg.voiceManagementRoleId) return i.reply({content:'Configure voiceJoinChannelId et voiceManagementRoleId dans config.json.',ephemeral:true});
       const channel = i.channel;
       const embed = new EmbedBuilder()
@@ -716,6 +756,59 @@ async function handleButton(i, client) {
     const g = store.getGiveaway.get(id);
     if (!g) return i.reply({ content: 'Ce concours n’est plus enregistré dans la base du bot. Contacte le staff pour qu’il le recrée.', ephemeral: true });
     if (g.ended || g.ends_at <= Date.now()) return i.reply({content:'Ce concours est terminé.',ephemeral:true});
+    let member;
+    if (g.required_role_id || g.require_server_boost) {
+      member = await i.guild.members.fetch(i.user.id).catch(() => null);
+      if (!member) return i.reply({ content: 'Impossible de vérifier ton rôle ou ton statut de boost sur ce serveur. Réessaie dans quelques instants.', ephemeral: true });
+    }
+    const memberRoleIds = member?.roles.cache;
+    let participantUser = i.user;
+    if (g.require_server_tag) {
+      participantUser = await client.users.fetch(i.user.id, { force: true }).catch(() => null);
+      if (!participantUser) {
+        return i.reply({ content: 'Impossible de vérifier ton Server Tag Discord. Réessaie dans quelques instants.', ephemeral: true });
+      }
+    }
+    const eligibilityFailure = giveawayEligibility({
+      requiredRoleId: g.required_role_id,
+      minAccountAgeDays: g.min_account_age_days,
+      requireServerTag: Boolean(g.require_server_tag),
+      serverTagGuildId: participantUser.primaryGuild?.identityGuildId,
+      serverTagEnabled: participantUser.primaryGuild?.identityEnabled,
+      guildId: i.guild.id,
+      requireServerBoost: Boolean(g.require_server_boost),
+      isServerBooster: Boolean(member?.premiumSince),
+      memberRoleIds,
+      accountCreatedAt: participantUser.createdTimestamp
+    });
+    if (eligibilityFailure === 'server_tag') {
+      return i.reply({
+        content: `Tu dois équiper le Server Tag de **${i.guild.name}** sur ton profil Discord pour participer.`,
+        ephemeral: true
+      });
+    }
+    if (eligibilityFailure === 'server_boost') {
+      return i.reply({
+        content: 'Tu dois booster ce serveur pour participer à ce giveaway.',
+        ephemeral: true
+      });
+    }
+    if (eligibilityFailure === 'required_role') {
+        return i.reply({
+          content: `Tu dois avoir le rôle <@&${g.required_role_id}> pour participer.`,
+          allowedMentions: { parse: [] },
+          ephemeral: true
+        });
+    }
+    if (eligibilityFailure === 'account_age_unknown') {
+      return i.reply({ content: 'Impossible de vérifier l’âge de ton compte Discord. Réessaie plus tard.', ephemeral: true });
+    }
+    if (eligibilityFailure === 'account_too_new') {
+      return i.reply({
+        content: `Ton compte Discord doit avoir au moins ${g.min_account_age_days} jours pour participer.`,
+        ephemeral: true
+      });
+    }
     const result = store.addEntry.run(id, i.user.id, id, Date.now());
     if (result.changes) {
       await i.deferReply({ ephemeral: true });

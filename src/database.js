@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS giveaways (
   host_id TEXT NOT NULL,
   prize TEXT NOT NULL,
   winners INTEGER NOT NULL,
+  required_role_id TEXT,
+  require_server_tag INTEGER NOT NULL DEFAULT 0,
+  require_server_boost INTEGER NOT NULL DEFAULT 0,
+  min_account_age_days INTEGER NOT NULL DEFAULT 0,
   ends_at INTEGER NOT NULL,
   ended INTEGER NOT NULL DEFAULT 0
 );
@@ -61,13 +65,30 @@ CREATE TABLE IF NOT EXISTS invite_joins (
 );
 `);
 
+const giveawayColumns = new Set(db.pragma('table_info(giveaways)').map(column => column.name));
+if (!giveawayColumns.has('required_role_id')) {
+  db.exec('ALTER TABLE giveaways ADD COLUMN required_role_id TEXT');
+}
+if (!giveawayColumns.has('require_server_tag')) {
+  db.exec('ALTER TABLE giveaways ADD COLUMN require_server_tag INTEGER NOT NULL DEFAULT 0');
+}
+if (!giveawayColumns.has('require_server_boost')) {
+  db.exec('ALTER TABLE giveaways ADD COLUMN require_server_boost INTEGER NOT NULL DEFAULT 0');
+}
+if (!giveawayColumns.has('min_account_age_days')) {
+  db.exec('ALTER TABLE giveaways ADD COLUMN min_account_age_days INTEGER NOT NULL DEFAULT 0');
+}
+
 module.exports = {
   db,
   setRiotId: db.prepare(`INSERT INTO riot_profiles(user_id, riot_id, updated_at)
     VALUES(?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET riot_id=excluded.riot_id, updated_at=excluded.updated_at`),
   getRiotId: db.prepare('SELECT riot_id FROM riot_profiles WHERE user_id = ?'),
-  createGiveaway: db.prepare(`INSERT INTO giveaways(message_id, channel_id, guild_id, host_id, prize, winners, ends_at)
-    VALUES(@message_id, @channel_id, @guild_id, @host_id, @prize, @winners, @ends_at)`),
+  createGiveaway: db.prepare(`INSERT INTO giveaways(
+    message_id, channel_id, guild_id, host_id, prize, winners, required_role_id, require_server_tag, require_server_boost, min_account_age_days, ends_at
+  ) VALUES(
+    @message_id, @channel_id, @guild_id, @host_id, @prize, @winners, @required_role_id, @require_server_tag, @require_server_boost, @min_account_age_days, @ends_at
+  )`),
   getGiveaway: db.prepare('SELECT * FROM giveaways WHERE message_id = ?'),
   activeGiveaways: db.prepare('SELECT * FROM giveaways WHERE ended = 0'),
   endGiveaway: db.prepare('UPDATE giveaways SET ended = 1 WHERE message_id = ?'),
